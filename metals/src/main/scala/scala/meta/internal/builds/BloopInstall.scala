@@ -1,16 +1,17 @@
 package scala.meta.internal.builds
 
+import org.eclipse.lsp4j.{Diagnostic, MessageType, PublishDiagnosticsParams}
+
+import java.util
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
-
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
-
 import scala.meta.internal.builds.Digest.Status
 import scala.meta.internal.metals.BuildInfo
 import scala.meta.internal.metals.Confirmation
-import scala.meta.internal.metals.Messages._
-import scala.meta.internal.metals.MetalsEnrichments._
+import scala.meta.internal.metals.Messages.*
+import scala.meta.internal.metals.MetalsEnrichments.*
 import scala.meta.internal.metals.Tables
 import scala.meta.internal.metals.UserConfiguration
 import scala.meta.internal.metals.clients.language.MetalsLanguageClient
@@ -126,6 +127,7 @@ final class BloopInstall(
       isImportInProcess: AtomicBoolean,
   ): Future[WorkspaceLoadedStatus] =
     synchronized {
+      pprint.log("Debug 1")
       oldInstallResult(digest) match {
         case Some(result)
             if result != WorkspaceLoadedStatus.Duplicate(Status.Requested) =>
@@ -144,6 +146,9 @@ final class BloopInstall(
                 digest,
               )
               installResult <- {
+                pprint.log("Debug 2")
+                languageClient.publishDiagnostics(new PublishDiagnosticsParams("file:///home/afentev/MIPT/tinkoff/bachelor-homeworks/homeworks/s1-07/build.sbt", List(new org.eclipse.lsp4j.Diagnostic(new org.eclipse.lsp4j.Range(new org.eclipse.lsp4j.Position(0, 1), new org.eclipse.lsp4j.Position(0, 3)), "text")).asJava))
+                languageClient.showMessage(MessageType.Error, "Debug")
                 if (userResponse.isYes) {
                   runUnconditionally(buildTool, isImportInProcess)
                 } else {

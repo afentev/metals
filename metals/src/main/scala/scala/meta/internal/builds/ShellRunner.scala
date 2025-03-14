@@ -101,7 +101,10 @@ class ShellRunner(time: Time, workDoneProvider: WorkDoneProgress)(implicit
       redirectErrorOutput,
       env,
       Some(processOut),
-      Some(processErr),
+      Some((x: String) => {
+        pprint.log("Error Debug:" + x)
+        scribe.error(x)
+      }),
       propagateError,
     )
     val result = Promise[Int]()

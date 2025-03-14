@@ -599,17 +599,20 @@ class ConnectionProvider(
     ): Future[BuildChange] = {
       for {
         result <- {
-          if (forceImport)
+          if (forceImport) {
+            pprint.log("Debug 4")
             bloopInstall.runUnconditionally(
               buildTool,
               isImportInProcess,
             )
-          else
+          } else {
+            pprint.log("Debug 5")
             bloopInstall.runIfApproved(
               buildTool,
               checksum,
               isImportInProcess,
             )
+          }
         }
         change <- {
           if (result.isInstalled) createSession(shutdownServer)

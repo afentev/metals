@@ -295,6 +295,7 @@ final class Diagnostics(
     } {
       all.add(d)
     }
+    pprint.log(Seq("DIAGNOSTICS: ", uri, all).mkString("+++"))
     languageClient.publishDiagnostics(new PublishDiagnosticsParams(uri, all))
   }
 
