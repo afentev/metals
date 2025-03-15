@@ -267,6 +267,7 @@ object Bill {
       val byFile = reporter.infos.groupBy(_.pos.source.file)
       val fixedErrors = hasError.filterNot(byFile.contains)
       fixedErrors.foreach { file =>
+        pprint.log("Initial diagnostic fill? 1")
         client.onBuildPublishDiagnostics(
           new PublishDiagnosticsParams(
             new TextDocumentIdentifier(file.name),
@@ -304,6 +305,7 @@ object Bill {
           }
           .toList
         val uri = file.name
+        pprint.log("Initial diagnostic fill? 2")
         val params =
           new PublishDiagnosticsParams(
             new TextDocumentIdentifier(uri),

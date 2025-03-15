@@ -461,6 +461,7 @@ class WorkspaceLspService(
   override def didChange(
       params: DidChangeTextDocumentParams
   ): CompletableFuture[Unit] = {
+    pprint.log("did change original")
     val uri = params.getTextDocument().getUri()
     /* If a file changed that was most likely caused by the user,
      * we should consider it as the focused document.

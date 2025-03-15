@@ -828,6 +828,7 @@ abstract class MetalsLspService(
     params.getContentChanges.asScala.lastOption match {
       case None => CompletableFuture.completedFuture(())
       case Some(change) =>
+        pprint.log(change)
         val path = params.getTextDocument.getUri.toAbsolutePath
         buffers.put(path, change.getText)
         diagnostics.didChange(path)

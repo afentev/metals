@@ -150,6 +150,7 @@ final class Diagnostics(
   }
 
   def didChange(path: AbsolutePath): Unit = {
+    pprint.log("did change start")
     publishDiagnostics(path)
   }
 
@@ -206,6 +207,7 @@ final class Diagnostics(
     // Notification N: [1, ..., N]
     if (isReset || !isSamePathAsLastDiagnostic) {
       publishDiagnosticsBuffer()
+      pprint.log("diagnostic check")
       publishDiagnostics(path, queue)
     } else {
       diagnosticsBuffer.add(path)
@@ -235,6 +237,7 @@ final class Diagnostics(
   }
 
   private def publishDiagnostics(path: AbsolutePath): Unit = {
+    pprint.log("diagnostic start")
     publishDiagnostics(
       path,
       diagnostics.getOrElse(path, new ju.LinkedList[Diagnostic]()),

@@ -149,6 +149,7 @@ final class ForwardingMetalsBuildClient(
   }
 
   def onBuildPublishDiagnostics(params: b.PublishDiagnosticsParams): Unit = {
+    pprint.log("Test " + params)
     diagnostics.onBuildPublishDiagnostics(params)
   }
 

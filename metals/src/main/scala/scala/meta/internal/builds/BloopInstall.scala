@@ -15,6 +15,7 @@ import scala.meta.internal.metals.MetalsEnrichments.*
 import scala.meta.internal.metals.Tables
 import scala.meta.internal.metals.UserConfiguration
 import scala.meta.internal.metals.clients.language.MetalsLanguageClient
+import scala.meta.internal.parsing.BloopDiagnosticsParser
 import scala.meta.internal.process.ExitCodes
 import scala.meta.io.AbsolutePath
 
@@ -74,7 +75,7 @@ final class BloopInstall(
   ): Future[WorkspaceLoadedStatus] = {
     persistChecksumStatus(Status.Started, buildTool)
     val processFuture = shellRunner
-      .run(
+      .runAndCollect(
         s"${buildTool.executableName} bloopInstall",
         args,
         buildTool.projectRoot,
@@ -89,9 +90,14 @@ final class BloopInstall(
         ) ++ sys.env,
       )
       .map {
-        case ExitCodes.Success => WorkspaceLoadedStatus.Installed
-        case ExitCodes.Cancel => WorkspaceLoadedStatus.Cancelled
-        case result => WorkspaceLoadedStatus.Failed(result)
+        case (ExitCodes.Success, x) => (WorkspaceLoadedStatus.Installed, x)
+        case (ExitCodes.Cancel, x) => (WorkspaceLoadedStatus.Cancelled, x)
+        case (result, x) => (WorkspaceLoadedStatus.Failed(result), x)
+      }
+      .map {case (lhs, x) =>
+        pprint.log("Here: " + x.toString())
+        BloopDiagnosticsParser.getDiagnosticsFromErrors(x.toArray).foreach(languageClient.publishDiagnostics)
+        lhs
       }
     processFuture.foreach { result =>
       try result.toChecksumStatus.foreach(persistChecksumStatus(_, buildTool))
