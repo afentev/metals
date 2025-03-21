@@ -153,8 +153,7 @@ final class BloopInstall(
               )
               installResult <- {
                 pprint.log("Debug 2")
-                languageClient.publishDiagnostics(new PublishDiagnosticsParams("file:///home/afentev/MIPT/tinkoff/bachelor-homeworks/homeworks/s1-07/build.sbt", List(new org.eclipse.lsp4j.Diagnostic(new org.eclipse.lsp4j.Range(new org.eclipse.lsp4j.Position(0, 1), new org.eclipse.lsp4j.Position(0, 3)), "text")).asJava))
-                languageClient.showMessage(MessageType.Error, "Debug")
+//                languageClient.showMessage(MessageType.Error, "Debug")
                 if (userResponse.isYes) {
                   runUnconditionally(buildTool, isImportInProcess)
                 } else {
