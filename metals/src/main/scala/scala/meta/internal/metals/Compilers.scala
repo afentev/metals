@@ -247,6 +247,7 @@ class Compilers(
 
         outlineFilesProvider.didChange(pc.buildTargetId(), path)
 
+        pprint.log("Presentation compiler did change potential call" + path.toNIO.toUri.toString + " --- " + input.value)
         for {
           ds <-
             pc
@@ -260,6 +261,10 @@ class Compilers(
         }
       }
       .getOrElse(Future.successful(Nil))
+      .map(ss => {
+        pprint.log("Finished other")
+        ss
+      })
   }
 
   def didCompile(report: CompileReport): Unit = {
@@ -1627,6 +1632,7 @@ class Compilers(
       if (doc.text.isEmpty()) doc.withText(text)
       else doc
     }
+    pprint.log("TESTS " + textDocument.diagnostics.toString())
     if (prependedLinesSize > 0)
       cleanupAutoImports(textDocument, text, prependedLinesSize)
     else textDocument

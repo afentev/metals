@@ -832,7 +832,10 @@ abstract class MetalsLspService(
         val path = params.getTextDocument.getUri.toAbsolutePath
         buffers.put(path, change.getText)
         diagnostics.didChange(path)
-        compilers.didChange(path)
+        val x = compilers.didChange(path)
+        pprint.log("Check::: " + path.toURI.toString)
+//        x.map(r => languageClient.publishDiagnostics(new PublishDiagnosticsParams(path.toURI.toString, r.asJava)))
+//        languageClient.publishDiagnostics(new PublishDiagnosticsParams(path.toString(), x.value.get.get.asJava))
         referencesProvider.didChange(path, change.getText)
         parseTrees(path).asJava
     }
@@ -909,12 +912,21 @@ abstract class MetalsLspService(
         (path, fingerprint)
       }
 
+    pprint.log("On Change Debug")
+
     Future
       .sequence(
         List(
           Future(indexer.reindexWorkspaceSources(paths)),
           compilations.compileFiles(pathsWithFingerPrints),
-        ) ++ paths.map(f => Future(interactiveSemanticdbs.textDocument(f)))
+        ) ++ paths.map(f => Future(interactiveSemanticdbs.textDocument(f)).map(document => {
+          document.toOption.foreach(d => languageClient.publishDiagnostics(
+            new PublishDiagnosticsParams(f.toString(),
+              d.diagnostics.toList.map(diag => new Diagnostic(diag.getRange.toLsp, diag.message, DiagnosticSeverity.Error, f.toString())).asJava
+            )
+          ))
+          document
+        }))
       )
       .ignoreValue
   }
@@ -1192,7 +1204,8 @@ abstract class MetalsLspService(
           thresholdMillis = 1.second.toMillis,
         ) {
           val path = params.getTextDocument.getUri.toAbsolutePath
-          codeLensProvider.findLenses(path).map(_.toList.asJava)
+          val result = codeLensProvider.findLenses(path, languageClient).map(_.toList.asJava)
+          result.map(r => {pprint.log("XXXXXXXXXXXXXXXXXXXX" + r.toString); r})
         }
       }
     }

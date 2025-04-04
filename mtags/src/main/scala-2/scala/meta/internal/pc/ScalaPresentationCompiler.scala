@@ -56,6 +56,8 @@ import org.eclipse.lsp4j.SelectionRange
 import org.eclipse.lsp4j.SignatureHelp
 import org.eclipse.lsp4j.TextEdit
 
+import scala.reflect.internal.util.RangePosition
+
 case class ScalaPresentationCompiler(
     buildTargetIdentifier: String = "",
     buildTargetName: Option[String] = None,
@@ -166,10 +168,45 @@ case class ScalaPresentationCompiler(
     )
   }
 
+  def temp(pc: CompilerWrapper[StoreReporter, MetalsGlobal], params: VirtualFileParams): ju.List[Diagnostic] = {
+    pprint.log("temp called1")
+    val unit = new TypeCheckCompilationUnit(pc.compiler(params), params)
+    pprint.log("temp called2")
+    val infos = unit.getInfos
+    pprint.log("temp called3")
+    val diagnostics = infos.flatMap(info => info.pos match {
+      case range: RangePosition =>
+        val source = range.source
+
+        val l1 = source.offsetToLine(range.start)
+        val o1 = range.start - source.lineToOffset(l1)
+
+        val l2 = source.offsetToLine(range.end)
+        val o2 = range.end - source.lineToOffset(l2)
+
+        Some(new Diagnostic(new Range(new org.eclipse.lsp4j.Position(l1, o1), new org.eclipse.lsp4j.Position(l2, o2)), info.msg))
+      case _ =>
+        pprint.log("Skipped non range info!!!")
+        None
+    }).toList
+    pprint.log("temp called4")
+    pprint.log(diagnostics)
+    pprint.log("temp called5")
+    diagnostics.asJava
+  }
+
   override def didChange(
       params: VirtualFileParams
   ): CompletableFuture[ju.List[Diagnostic]] = {
-    CompletableFuture.completedFuture(Nil.asJava)
+    println("TTTTTTTTTTTTTTTTTTTTTTTTTTTTTT")
+    val result: CompletableFuture[ju.List[Diagnostic]] = compilerAccess.withNonInterruptableCompiler(
+      List.empty[Diagnostic].asJava,
+      params.token
+    ) (temp(_, params))(params.toQueryContext)
+    result.thenApply(x => {
+      pprint.log("Future finished")
+      x
+    })
   }
 
   def didClose(uri: URI): Unit = {
