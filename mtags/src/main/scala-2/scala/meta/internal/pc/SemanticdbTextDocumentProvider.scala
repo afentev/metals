@@ -1,10 +1,11 @@
 package scala.meta.internal.pc
 
+import org.eclipse.lsp4j.{Diagnostic, Range}
+
+import java.io.{PrintWriter, StringWriter}
 import java.net.URI
 import java.nio.file.Paths
-
 import scala.util.Properties
-
 import scala.meta.dialects
 import scala.meta.internal.mtags.MD5
 import scala.meta.internal.mtags.MtagsEnrichments._
@@ -13,6 +14,8 @@ import scala.meta.internal.{semanticdb => s}
 import scala.meta.io.AbsolutePath
 import scala.meta.parsers.ParseException
 import scala.meta.tokenizers.TokenizeException
+import scala.tools.nsc.Settings
+import scala.tools.nsc.reporters.ConsoleReporter
 
 class SemanticdbTextDocumentProvider(
     val compiler: MetalsGlobal,
@@ -24,6 +27,15 @@ class SemanticdbTextDocumentProvider(
       uri: URI,
       code: String
   ): s.TextDocument = {
+    print("SEMANTICDB START")
+    val prevR = reporter
+    val stringWriterErr = new StringWriter();
+    val printWriterErr = new PrintWriter(stringWriterErr, true);
+    reporter = new ConsoleReporter(new Settings(s => {
+      println("not called for some reason " + s)
+      throw new IllegalStateException("or called?")
+    }), Console.in, printWriterErr, new PrintWriter(Console.out, true))
+
     val filePath = AbsolutePath(Paths.get(uri))
     val validCode = removeMagicImports(code, filePath)
 
@@ -60,7 +72,7 @@ class SemanticdbTextDocumentProvider(
           s.TextDocument.defaultInstance
       }
 
-    compiler.workspace
+    val u: s.TextDocument = compiler.workspace
       .flatMap { workspacePath =>
         scala.util.Try(workspacePath.relativize(filePath.toNIO)).toOption
       }
@@ -71,5 +83,46 @@ class SemanticdbTextDocumentProvider(
         document.withUri(relativeString)
       }
       .getOrElse(document)
+    printWriterErr.flush()
+    stringWriterErr.flush()
+    print("SEMANTICDB END")
+
+    val errors = stringWriterErr.toString.split('\n')
+    val diagnostics = getDiagnosticsFromErrors(errors)
+    pprint.log(diagnostics)
+    reporter = prevR
+    u.addDiagnostics(diagnostics.map(d => s.Diagnostic(range=Some(s.Range(d.getRange.getStart.getLine, d.getRange.getStart.getCharacter,
+      d.getRange.getEnd.getLine, 100)), severity = s.Diagnostic.Severity.ERROR, message = d.getMessage)): _*)
+  }
+
+  private def getDiagnosticsFromErrors(errorLines: Array[String]): Seq[Diagnostic] = {
+    errorLines.foldLeft(List.empty[Vector[String]]){case (accumulator, element) =>
+      if (element.startsWith("file://")) {
+        Vector(element) +: accumulator
+      } else {
+        (element +: accumulator.head) +: accumulator.tail
+      }
+    }.flatMap(errorsR => {
+      val errors = errorsR.reverse
+      for {
+        head <- errors.headOption.map(_.drop("file://".length))
+        splitted = head.split(":", 3)
+        filepath <- splitted.headOption
+        line1 = splitted.lift(1).map(_.toInt).get
+        line0 = line1 - 1
+        errorText <- splitted.lift(2)
+        uriFilepath = "file://" + filepath
+
+        pointerIndex = errors.indexWhere("""^\s*\^""".r.findPrefixOf(_).isDefined)
+        (string, errorTextEnriched) = if (pointerIndex != -1) (errors(pointerIndex), (errorText +: errors.slice(1, pointerIndex + 1)).mkString("\n")) else ("", errorText)
+        startIndex = string.indexOf('^').max(0)
+
+        positionStart = new org.eclipse.lsp4j.Position(line0, startIndex)
+        positionEnd = new org.eclipse.lsp4j.Position(line0, 100)
+        range = new Range(positionStart, positionEnd)
+        diagnostic = new Diagnostic(range, errorTextEnriched)
+      } yield diagnostic
+    }
+    )
   }
 }

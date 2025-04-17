@@ -914,7 +914,14 @@ abstract class MetalsLspService(
         List(
           Future(indexer.reindexWorkspaceSources(paths)),
           compilations.compileFiles(pathsWithFingerPrints),
-        ) ++ paths.map(f => Future(interactiveSemanticdbs.textDocument(f)))
+        ) ++ paths.map(f => Future(interactiveSemanticdbs.textDocument(f)).map(document => {
+          document.toOption.foreach(d => languageClient.publishDiagnostics(
+            new PublishDiagnosticsParams(f.toString(),
+              d.diagnostics.toList.map(diag => new Diagnostic(diag.getRange.toLsp, diag.message, DiagnosticSeverity.Error, f.toString())).asJava
+            )
+          ))
+          document
+        }))
       )
       .ignoreValue
   }

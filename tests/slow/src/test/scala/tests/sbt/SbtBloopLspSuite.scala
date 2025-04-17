@@ -73,6 +73,39 @@ class SbtBloopLspSuite
     }
   }
 
+  test("myTest") {
+    cleanWorkspace()
+    client.importBuild = ImportBuild.yes
+    for {
+      _ <- initialize(
+        s"""|/inner/project/build.properties
+            |sbt.version=$sbtVersion
+            |/inner/build.sbt
+            |scalaVersion := "${V.scala213}"
+            |/inner/src/main/scala/A.scala
+            |
+            |object A {
+            |  val i: Int = "aaa"
+            |}
+            |""".stripMargin
+      )
+      _ <- server.server.indexingPromise.future
+      _ = assert(workspace.resolve("inner/.bloop").exists)
+      _ = assert(server.server.bspSession.get.main.isBloop)
+      _ <- server.didOpen("inner/src/main/scala/A.scala")
+      _ <- server.didSave("inner/src/main/scala/A.scala")
+      _ = assertNoDiff(
+        client.pathDiagnostics("inner/src/main/scala/A.scala"),
+        """|inner/src/main/scala/A.scala:3:16: error: type mismatch;
+           | found   : String("aaa")
+           | required: Int
+           |  val i: Int = "aaa"
+           |               ^^^^^
+           |""".stripMargin,
+      )
+    } yield ()
+  }
+
   test("inner") {
     cleanWorkspace()
     client.importBuild = ImportBuild.yes
