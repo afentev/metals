@@ -65,6 +65,7 @@ import org.eclipse.lsp4j.jsonrpc.messages.{Either => JEither}
 import org.eclipse.lsp4j.{Position => LspPosition}
 import org.eclipse.lsp4j.{Range => LspRange}
 import org.eclipse.lsp4j.{debug => d}
+import org.eclipse.lsp4j.DiagnosticSeverity
 
 /**
  * Manages lifecycle for presentation compilers in all build targets.
@@ -252,12 +253,17 @@ class Compilers(
           )
           .flatten
           .fold((0, input.value))(imports =>
-            (imports.size, SbtBuildTool.prependAutoImports(input.value, imports))
+            (
+              imports.size,
+              SbtBuildTool.prependAutoImports(input.value, imports),
+            )
           )
 
         outlineFilesProvider.didChange(pc.buildTargetId(), path)
 
-        pprint.log("Presentation compiler did change potential call" + path.toNIO.toUri.toString + " --- " + modifiedText)
+        pprint.log(
+          "Presentation compiler did change potential call" + path.toNIO.toUri.toString + " --- " + modifiedText
+        )
         for {
           ds <-
             pc
@@ -275,6 +281,7 @@ class Compilers(
                   range.setStart(start)
                   range.setEnd(end)
                   d.setRange(range)
+                  d.setSeverity(DiagnosticSeverity.Error)
                 })
                 pprint.log("XXQQ " + x.toString)
                 x

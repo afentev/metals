@@ -833,7 +833,7 @@ abstract class MetalsLspService(
         buffers.put(path, change.getText)
         val x = compilers.didChange(path)
         pprint.log("Check::: " + path.toURI.toString)
-        x.map(r => {
+        val res = x.map(r => {
           pprint.log("YYYSYSYSYYSS " + r.toString())
           diagnostics.onPublishDiagnostics(path, r, isReset = true)
           diagnostics.didChange(path)
@@ -841,6 +841,7 @@ abstract class MetalsLspService(
 //        languageClient.publishDiagnostics(new PublishDiagnosticsParams(path.toString(), x.value.get.get.asJava))
         referencesProvider.didChange(path, change.getText)
         parseTrees(path).asJava
+        res.asJavaUnit
     }
   }
 
@@ -1200,8 +1201,12 @@ abstract class MetalsLspService(
           thresholdMillis = 1.second.toMillis,
         ) {
           val path = params.getTextDocument.getUri.toAbsolutePath
-          val result = codeLensProvider.findLenses(path, languageClient).map(_.toList.asJava)
-          result.map(r => {pprint.log("XXXXXXXXXXXXXXXXXXXX" + r.toString); r})
+          val result = codeLensProvider
+            .findLenses(path, languageClient)
+            .map(_.toList.asJava)
+          result.map(r => {
+            pprint.log("XXXXXXXXXXXXXXXXXXXX" + r.toString); r
+          })
         }
       }
     }
