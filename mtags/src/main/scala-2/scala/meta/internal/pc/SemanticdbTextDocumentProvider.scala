@@ -1,6 +1,6 @@
 package scala.meta.internal.pc
 
-import org.eclipse.lsp4j.{Diagnostic, Range}
+import org.eclipse.lsp4j.{Diagnostic, DiagnosticSeverity, Range}
 
 import java.io.{PrintWriter, StringWriter}
 import java.net.URI
@@ -120,7 +120,7 @@ class SemanticdbTextDocumentProvider(
         positionStart = new org.eclipse.lsp4j.Position(line0, startIndex)
         positionEnd = new org.eclipse.lsp4j.Position(line0, 100)
         range = new Range(positionStart, positionEnd)
-        diagnostic = new Diagnostic(range, errorTextEnriched)
+        diagnostic = new Diagnostic(range, errorTextEnriched, DiagnosticSeverity.Error, uriFilepath)
       } yield diagnostic
     }
     )

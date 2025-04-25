@@ -36,7 +36,44 @@ class SbtBloopLspSuite
       workspace: AbsolutePath
   ): Option[String] = SbtDigest.current(workspace)
 
-  test("basic") {
+//  test("basic") {
+//    cleanWorkspace()
+//    // directory should not be used as sbt script
+//    workspace.resolve("sbt").createDirectories()
+//    for {
+//      _ <- initialize(
+//        s"""|/project/build.properties
+//            |sbt.version=$sbtVersion
+//            |/build.sbt
+//            |scalaVersion := "${V.scala213}"
+//            |""".stripMargin
+//      )
+//      _ = assertNoDiff(
+//        client.workspaceMessageRequests,
+//        importBuildMessage,
+//      )
+//      _ = client.messageRequests.clear() // restart
+//      _ = assertStatus(_.isInstalled)
+//      _ <- server.didChange("build.sbt")(_ + "\n// comment")
+//      _ = assertNoDiff(client.workspaceMessageRequests, "")
+//      _ <- server.didSave("build.sbt")
+//      // Comment changes do not trigger "re-import project" request
+//      _ = assertNoDiff(client.workspaceMessageRequests, "")
+//      _ = client.importBuildChanges = ImportBuildChanges.yes
+//      _ <- server.didChange("build.sbt") { text =>
+//        text + "\nversion := \"1.0.0\"\n"
+//      }
+//      _ = assertNoDiff(client.workspaceMessageRequests, "")
+//      _ <- server.didSave("build.sbt")
+//    } yield {
+//      assertNoDiff(
+//        client.workspaceMessageRequests,
+//        importBuildChangesMessage,
+//      )
+//    }
+//  }
+
+  test("myTest") {
     cleanWorkspace()
     // directory should not be used as sbt script
     workspace.resolve("sbt").createDirectories()
@@ -65,37 +102,13 @@ class SbtBloopLspSuite
       }
       _ = assertNoDiff(client.workspaceMessageRequests, "")
       _ <- server.didSave("build.sbt")
-    } yield {
-      assertNoDiff(
-        client.workspaceMessageRequests,
-        importBuildChangesMessage,
-      )
-    }
-  }
 
-  test("myTest") {
-    cleanWorkspace()
-    client.importBuild = ImportBuild.yes
-    for {
-      _ <- initialize(
-        s"""|/inner/project/build.properties
-            |sbt.version=$sbtVersion
-            |/inner/build.sbt
-            |scalaVersion := "${V.scala213}"
-            |/inner/src/main/scala/A.scala
-            |
-            |object A {
-            |  val i: Int = "aaa"
-            |}
-            |""".stripMargin
-      )
-      _ <- server.server.indexingPromise.future
-      _ = assert(workspace.resolve("inner/.bloop").exists)
-      _ = assert(server.server.bspSession.get.main.isBloop)
-      _ <- server.didOpen("inner/src/main/scala/A.scala")
-      _ <- server.didSave("inner/src/main/scala/A.scala")
+      _ <- server.didChange("build.sbt") { text =>
+        text + "\nval foo: String = 42\n"
+      }
+      _ <- server.didSave("build.sbt")
       _ = assertNoDiff(
-        client.pathDiagnostics("inner/src/main/scala/A.scala"),
+        client.pathDiagnostics("build.sbt"),
         """|inner/src/main/scala/A.scala:3:16: error: type mismatch;
            | found   : String("aaa")
            | required: Int
@@ -103,7 +116,13 @@ class SbtBloopLspSuite
            |               ^^^^^
            |""".stripMargin,
       )
-    } yield ()
+
+    } yield {
+      assertNoDiff(
+        client.workspaceMessageRequests,
+        importBuildChangesMessage,
+      )
+    }
   }
 
   test("inner") {

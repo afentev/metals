@@ -832,7 +832,16 @@ abstract class MetalsLspService(
         val path = params.getTextDocument.getUri.toAbsolutePath
         buffers.put(path, change.getText)
         diagnostics.didChange(path)
-        compilers.didChange(path)
+        val x = compilers.didChange(path)
+        pprint.log(path.toString())
+        x.map{
+          r => {
+            pprint.log("HIIIIIiiii")
+            pprint.log(r.asJava)
+            languageClient.publishDiagnostics(new PublishDiagnosticsParams(path.toString, r.asJava))
+          }
+        }
+//                languageClient.publishDiagnostics(new PublishDiagnosticsParams(path.toString(), x.value.get.get.asJava))
         referencesProvider.didChange(path, change.getText)
         parseTrees(path).asJava
     }
@@ -914,14 +923,7 @@ abstract class MetalsLspService(
         List(
           Future(indexer.reindexWorkspaceSources(paths)),
           compilations.compileFiles(pathsWithFingerPrints),
-        ) ++ paths.map(f => Future(interactiveSemanticdbs.textDocument(f)).map(document => {
-          document.toOption.foreach(d => languageClient.publishDiagnostics(
-            new PublishDiagnosticsParams(f.toString(),
-              d.diagnostics.toList.map(diag => new Diagnostic(diag.getRange.toLsp, diag.message, DiagnosticSeverity.Error, f.toString())).asJava
-            )
-          ))
-          document
-        }))
+        ) ++ paths.map(f => Future(interactiveSemanticdbs.textDocument(f)))
       )
       .ignoreValue
   }

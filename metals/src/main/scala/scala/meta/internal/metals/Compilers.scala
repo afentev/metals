@@ -246,6 +246,7 @@ class Compilers(
         )
 
         outlineFilesProvider.didChange(pc.buildTargetId(), path)
+        pprint.log(input.value)
 
         for {
           ds <-
