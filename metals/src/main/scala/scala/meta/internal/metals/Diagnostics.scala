@@ -276,8 +276,10 @@ final class Diagnostics(
     val all = new ju.ArrayList[Diagnostic](queue.size() + 1)
     for {
       diagnostic <- queue.asScala
-      freshDiagnostic <- toFreshDiagnostic(path, diagnostic)
+      freshDiagnostic = diagnostic//toFreshDiagnostic(path, diagnostic)
     } {
+      pprint.log(diagnostic)
+      pprint.log(freshDiagnostic)
       all.add(freshDiagnostic)
     }
     for {
@@ -314,11 +316,15 @@ final class Diagnostics(
   ): Option[Diagnostic] = {
     val current = path.toInputFromBuffers(buffers)
     val snapshot = snapshots.getOrElse(path, current)
+    pprint.log(snapshot)
+    pprint.log(current)
+    pprint.log(trees)
     val edit = TokenEditDistance(
       snapshot,
       current,
       trees,
     )
+    pprint.log(edit)
     edit match {
       case Right(edit) =>
         val result = edit

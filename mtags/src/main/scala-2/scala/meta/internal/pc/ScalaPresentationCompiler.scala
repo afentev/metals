@@ -185,7 +185,8 @@ case class ScalaPresentationCompiler(
         val o2 = range.end - source.lineToOffset(l2)
 
         Some(new Diagnostic(new Range(new org.eclipse.lsp4j.Position(l1, o1), new org.eclipse.lsp4j.Position(l2, o2)), info.msg))
-      case _ =>
+      case other =>
+        pprint.log(other)
         pprint.log("Skipped non range info!!!")
         None
     }).toList

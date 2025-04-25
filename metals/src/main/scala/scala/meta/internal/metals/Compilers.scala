@@ -245,16 +245,40 @@ class Compilers(
           AdjustedLspData.default,
         )
 
+        val (prependedLinesSize, modifiedText) = Option
+          .when(path.isSbt)(
+            buildTargets
+              .sbtAutoImports(path)
+          )
+          .flatten
+          .fold((0, input.value))(imports =>
+            (imports.size, SbtBuildTool.prependAutoImports(input.value, imports))
+          )
+
         outlineFilesProvider.didChange(pc.buildTargetId(), path)
 
-        pprint.log("Presentation compiler did change potential call" + path.toNIO.toUri.toString + " --- " + input.value)
+        pprint.log("Presentation compiler did change potential call" + path.toNIO.toUri.toString + " --- " + modifiedText)
         for {
           ds <-
             pc
               .didChange(
-                CompilerVirtualFileParams(path.toNIO.toUri(), input.value)
+                CompilerVirtualFileParams(path.toNIO.toUri(), modifiedText)
               )
               .asScala
+              .map(x => {
+                x.forEach(d => {
+                  val range = d.getRange
+                  val start = range.getStart
+                  val end = range.getEnd
+                  start.setLine(start.getLine - prependedLinesSize)
+                  end.setLine(end.getLine - prependedLinesSize)
+                  range.setStart(start)
+                  range.setEnd(end)
+                  d.setRange(range)
+                })
+                pprint.log("XXQQ " + x.toString)
+                x
+              })
         } yield {
           ds.asScala.map(adjust.adjustDiagnostic).toList
 

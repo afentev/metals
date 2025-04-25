@@ -27,11 +27,11 @@ final class CodeLensProvider(
         .textDocument(path)
         .documentIncludingStale
         .map { textDocument =>
-          languageClient.publishDiagnostics(new PublishDiagnosticsParams(path.toString(), textDocument.diagnostics.map( d => {
-            val range = d.range.get
-            new Diagnostic(new lsp4j.Range(new Position(range.startLine, range.startCharacter), new Position(range.endLine, range.endCharacter)), d.message)
-          }
-          ).asJava))
+//          languageClient.publishDiagnostics(new PublishDiagnosticsParams(path.toString(), textDocument.diagnostics.map( d => {
+//            val range = d.range.get
+//            new Diagnostic(new lsp4j.Range(new Position(range.startLine, range.startCharacter), new Position(range.endLine, range.endCharacter)), d.message)
+//          }
+//          ).asJava))
           val doc = TextDocumentWithPath(textDocument, path)
           enabledCodelenses.map(_.codeLenses(doc))
         }

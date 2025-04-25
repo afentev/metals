@@ -40,23 +40,22 @@ class TypeCheckCompilationUnit(
 //    throw new IllegalStateException("or called?")
 //  }))
   val prevR = reporter
-  reporter = new ConsoleReporter(new Settings(s => {
-        println("not called for some reason " + s)
-        throw new IllegalStateException("or called?")
-      }), Console.in, new PrintWriter(Console.err, true), new PrintWriter(Console.out, true))
+
+  val console = new StoreReporter
+  reporter = console
   typeCheck(unit)
-//  reporter.finish()
-//  printWriter.flush()
-//  stringWriter.flush()
-//  pprint.log(stringWriter.toString)
-//  printWriterErr.flush()
-//  stringWriterErr.flush()
-//  pprint.log(stringWriterErr.toString)
-//  reporter = prevR
+  reporter.finish()
+  printWriter.flush()
+  stringWriter.flush()
+  pprint.log(stringWriter.toString)
+  printWriterErr.flush()
+  stringWriterErr.flush()
+  pprint.log(stringWriterErr.toString)
+  reporter = prevR
 
   def getInfos: Set[StoreReporter.Info] = {
     println("getInfos called")
-    Set.empty
-//    reporter.asInstanceOf[StoreReporter].infos.toSet
+//    Set.empty
+    console.asInstanceOf[StoreReporter].infos.toSet
   }
 }
