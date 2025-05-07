@@ -182,6 +182,7 @@ final class Diagnostics(
       path: AbsolutePath,
       diagnostics: Seq[Diagnostic],
       isReset: Boolean,
+      useFreshDiagnostics: Boolean = true,
   ): Unit = {
     val isSamePathAsLastDiagnostic = path == lastPublished.get()
     lastPublished.set(path)
@@ -208,7 +209,7 @@ final class Diagnostics(
     if (isReset || !isSamePathAsLastDiagnostic) {
       publishDiagnosticsBuffer()
       pprint.log("diagnostic check")
-      publishDiagnostics(path, queue)
+      publishDiagnostics(path, queue, useFreshDiagnostics)
     } else {
       diagnosticsBuffer.add(path)
     }
@@ -270,13 +271,14 @@ final class Diagnostics(
   private def publishDiagnostics(
       path: AbsolutePath,
       queue: ju.Queue[Diagnostic],
+      useFreshDiagnostics: Boolean = true,
   ): Unit = {
     if (!path.isFile) return didDelete(path)
     val uri = path.toURI.toString
     val all = new ju.ArrayList[Diagnostic](queue.size() + 1)
     for {
       diagnostic <- queue.asScala
-      freshDiagnostic = diagnostic//toFreshDiagnostic(path, diagnostic)
+      freshDiagnostic <- if (useFreshDiagnostics) toFreshDiagnostic(path, diagnostic) else Some(diagnostic)
     } {
       pprint.log(diagnostic)
       pprint.log(freshDiagnostic)

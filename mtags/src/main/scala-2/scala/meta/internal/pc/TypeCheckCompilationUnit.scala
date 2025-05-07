@@ -41,10 +41,9 @@ class TypeCheckCompilationUnit(
 //  }))
   val prevR = reporter
 
-  val console = new StoreReporter
+  val console = storeReporterConstructor(settings)
   reporter = console
   typeCheck(unit)
-  reporter.finish()
   printWriter.flush()
   stringWriter.flush()
   pprint.log(stringWriter.toString)
@@ -53,9 +52,8 @@ class TypeCheckCompilationUnit(
   pprint.log(stringWriterErr.toString)
   reporter = prevR
 
-  def getInfos: Set[StoreReporter.Info] = {
+  def getInfos = {
     println("getInfos called")
-//    Set.empty
-    console.asInstanceOf[StoreReporter].infos.toSet
+    console.infos.toSet
   }
 }

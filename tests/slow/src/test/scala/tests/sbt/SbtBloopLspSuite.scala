@@ -36,6 +36,34 @@ class SbtBloopLspSuite
       workspace: AbsolutePath
   ): Option[String] = SbtDigest.current(workspace)
 
+  test("my bloopInstall test".only) {
+    cleanWorkspace()
+    // directory should not be used as sbt script
+    workspace.resolve("sbt").createDirectories()
+    for {
+      _ <- initialize(
+        s"""|/project/build.properties
+            |sbt.version=$sbtVersion
+            |/build.sbt
+            |scalaVersion := "${V.scala213}"
+            |val x: String = 42
+            |""".stripMargin,
+        expectError = true,
+      )
+      _ = assertStatus(!_.isInstalled)
+    } yield {
+      assertNoDiff(
+        client.pathDiagnostics("build.sbt"),
+        """|build.sbt:2:17: error:  error: type mismatch;
+           | found   : Int(42)
+           | required: String
+           |val x: String = 42
+           |                ^^
+           |""".stripMargin,
+      )
+    }
+  }
+
   test("myTest") {
     cleanWorkspace()
     // directory should not be used as sbt script

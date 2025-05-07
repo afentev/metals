@@ -1,7 +1,6 @@
 package scala.meta.internal.parsing
 
-import org.eclipse.lsp4j.PublishDiagnosticsParams
-import org.eclipse.lsp4j.{Diagnostic, Position, Range}
+import org.eclipse.lsp4j.{Diagnostic, DiagnosticSeverity, Position, PublishDiagnosticsParams, Range}
 
 import java.nio.file.Paths
 import scala.jdk.CollectionConverters.SeqHasAsJava
@@ -35,7 +34,7 @@ object BloopDiagnosticsParser {
         positionStart = new Position(line0, startIndex)
         positionEnd = new Position(line0, Integer.MAX_VALUE)
         range = new Range(positionStart, positionEnd)
-        diagnostic = new Diagnostic(range, errorTextEnriched)
+        diagnostic = new Diagnostic(range, errorTextEnriched, DiagnosticSeverity.Error, uriFilepath.toString)
       } yield FileDiagnostic(uriFilepath.toString, diagnostic)
     }
     ).groupBy(_.filepath).map { case (uriFilepath, diagnostics) =>
