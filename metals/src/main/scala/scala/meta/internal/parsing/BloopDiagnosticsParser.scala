@@ -24,7 +24,7 @@ object BloopDiagnosticsParser {
         filepath <- splitted.headOption
         line1 <- splitted.lift(1).flatMap(_.toIntOption)
         line0 = line1 - 1
-        errorText <- splitted.lift(2)
+        errorText <- splitted.lift(2).map(_.strip())
         uriFilepath = Paths.get(filepath).toUri
 
         pointerIndex = errors.indexWhere("""^\s*\^""".r.findPrefixOf(_).isDefined)

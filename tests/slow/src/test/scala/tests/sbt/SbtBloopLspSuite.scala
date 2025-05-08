@@ -53,12 +53,12 @@ class SbtBloopLspSuite
       _ = assertStatus(!_.isInstalled)
     } yield {
       assertNoDiff(
-        client.pathDiagnostics("build.sbt"),
-        """|build.sbt:2:17: error:  error: type mismatch;
+        client.pathDiagnostics("build.sbt", formatMessage = false),
+        """|error: type mismatch;
            | found   : Int(42)
            | required: String
            |val x: String = 42
-           |                ^^
+           |                ^
            |""".stripMargin,
       )
     }
