@@ -150,7 +150,6 @@ final class Diagnostics(
   }
 
   def didChange(path: AbsolutePath): Unit = {
-    pprint.log("did change start")
     publishDiagnostics(path)
   }
 
@@ -208,7 +207,6 @@ final class Diagnostics(
     // Notification N: [1, ..., N]
     if (isReset || !isSamePathAsLastDiagnostic) {
       publishDiagnosticsBuffer()
-      pprint.log("diagnostic check")
       publishDiagnostics(path, queue, useFreshDiagnostics)
     } else {
       diagnosticsBuffer.add(path)
@@ -238,7 +236,6 @@ final class Diagnostics(
   }
 
   private def publishDiagnostics(path: AbsolutePath): Unit = {
-    pprint.log("diagnostic start")
     publishDiagnostics(
       path,
       diagnostics.getOrElse(path, new ju.LinkedList[Diagnostic]()),
@@ -280,8 +277,6 @@ final class Diagnostics(
       diagnostic <- queue.asScala
       freshDiagnostic <- if (useFreshDiagnostics) toFreshDiagnostic(path, diagnostic) else Some(diagnostic)
     } {
-      pprint.log(diagnostic)
-      pprint.log(freshDiagnostic)
       all.add(freshDiagnostic)
     }
     for {
@@ -302,7 +297,6 @@ final class Diagnostics(
     } {
       all.add(d)
     }
-    pprint.log(Seq("DIAGNOSTICS: ", uri, all).mkString("+++"))
     languageClient.publishDiagnostics(new PublishDiagnosticsParams(uri, all))
   }
 
@@ -318,15 +312,11 @@ final class Diagnostics(
   ): Option[Diagnostic] = {
     val current = path.toInputFromBuffers(buffers)
     val snapshot = snapshots.getOrElse(path, current)
-    pprint.log(snapshot)
-    pprint.log(current)
-    pprint.log(trees)
     val edit = TokenEditDistance(
       snapshot,
       current,
       trees,
     )
-    pprint.log(edit)
     edit match {
       case Right(edit) =>
         val result = edit

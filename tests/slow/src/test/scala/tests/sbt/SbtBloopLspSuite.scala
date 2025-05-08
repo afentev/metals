@@ -36,7 +36,7 @@ class SbtBloopLspSuite
       workspace: AbsolutePath
   ): Option[String] = SbtDigest.current(workspace)
 
-  test("my bloopInstall test".only) {
+  test("my bloopInstall test") {
     cleanWorkspace()
     // directory should not be used as sbt script
     workspace.resolve("sbt").createDirectories()

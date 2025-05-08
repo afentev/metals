@@ -828,13 +828,10 @@ abstract class MetalsLspService(
     params.getContentChanges.asScala.lastOption match {
       case None => CompletableFuture.completedFuture(())
       case Some(change) =>
-        pprint.log(change)
         val path = params.getTextDocument.getUri.toAbsolutePath
         buffers.put(path, change.getText)
         val x = compilers.didChange(path)
-        pprint.log("Check::: " + path.toURI.toString)
         val res = x.map(r => {
-          pprint.log("YYYSYSYSYYSS " + r.toString())
           diagnostics.onPublishDiagnostics(path, r, isReset = true, useFreshDiagnostics = false)
         })
         referencesProvider.didChange(path, change.getText)
@@ -913,8 +910,6 @@ abstract class MetalsLspService(
         val fingerprint = fingerprints.add(path, FileIO.slurp(path, charset))
         (path, fingerprint)
       }
-
-    pprint.log("On Change Debug")
 
     Future
       .sequence(
@@ -1199,12 +1194,7 @@ abstract class MetalsLspService(
           thresholdMillis = 1.second.toMillis,
         ) {
           val path = params.getTextDocument.getUri.toAbsolutePath
-          val result = codeLensProvider
-            .findLenses(path)
-            .map(_.toList.asJava)
-          result.map(r => {
-            pprint.log("XXXXXXXXXXXXXXXXXXXX" + r.toString); r
-          })
+          codeLensProvider.findLenses(path).map(_.toList.asJava)
         }
       }
     }

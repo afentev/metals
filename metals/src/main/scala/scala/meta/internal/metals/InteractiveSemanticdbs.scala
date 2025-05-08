@@ -1,17 +1,18 @@
 package scala.meta.internal.metals
 
-import java.io.{PrintWriter, StringWriter}
 import java.nio.charset.Charset
 import java.util.Collections
+
 import scala.util.Success
 import scala.util.Try
-import scala.meta.internal.metals.MetalsEnrichments.*
+
+import scala.meta.internal.metals.MetalsEnrichments._
 import scala.meta.internal.metals.scalacli.ScalaCliServers
 import scala.meta.internal.mtags.MD5
 import scala.meta.internal.mtags.Semanticdbs
 import scala.meta.internal.mtags.Shebang
 import scala.meta.internal.mtags.TextDocumentLookup
-import scala.meta.internal.semanticdb as s
+import scala.meta.internal.{semanticdb => s}
 import scala.meta.io.AbsolutePath
 
 /**
@@ -50,18 +51,7 @@ final class InteractiveSemanticdbs(
 
   override def textDocument(
       source: AbsolutePath
-  ): TextDocumentLookup = {
-    try {
-      throw new RuntimeException()
-    } catch {
-      case e =>
-        pprint.log("Stack trace start")
-        e.printStackTrace()
-        pprint.log("Stack trace ends")
-    }
-
-    textDocument(source, unsavedContents = None)
-  }
+  ): TextDocumentLookup = textDocument(source, unsavedContents = None)
 
   def onClose(path: AbsolutePath): Unit = {
     textDocumentCache.remove(path)
@@ -112,13 +102,10 @@ final class InteractiveSemanticdbs(
               if (existingDoc == null || existingDoc.md5 != sha) {
                 compile(path, adjustedText) match {
                   case Success(doc) if doc != null =>
-                    pprint.log("Success")
                     if (!source.isDependencySource(workspace))
                       semanticdbIndexer().onChange(source, doc)
                     doc
-                  case _ =>
-                    pprint.log("Not success")
-                    null
+                  case _ => null
                 }
               } else
                 existingDoc

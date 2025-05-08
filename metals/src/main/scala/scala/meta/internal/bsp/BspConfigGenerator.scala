@@ -31,8 +31,7 @@ final class BspConfigGenerator(
   def runUnconditionally(
       buildTool: BuildServerProvider,
       args: List[String],
-  ): Future[BspConfigGenerationStatus] = {
-    pprint.log("Debug 3")
+  ): Future[BspConfigGenerationStatus] =
     shellRunner
       .run(
         s"${buildTool.buildServerName} bspConfig",
@@ -65,7 +64,6 @@ final class BspConfigGenerator(
           }
         case status => status
       }
-  }
 
   def chooseBuildServerProvider(
       buildTools: List[BuildServerProvider]

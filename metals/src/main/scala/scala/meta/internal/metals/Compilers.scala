@@ -261,9 +261,6 @@ class Compilers(
 
         outlineFilesProvider.didChange(pc.buildTargetId(), path)
 
-        pprint.log(
-          "Presentation compiler did change potential call" + path.toNIO.toUri.toString + " --- " + modifiedText
-        )
         for {
           ds <-
             pc
@@ -292,10 +289,6 @@ class Compilers(
         }
       }
       .getOrElse(Future.successful(Nil))
-      .map(ss => {
-        pprint.log("Finished other")
-        ss
-      })
   }
 
   def didCompile(report: CompileReport): Unit = {
