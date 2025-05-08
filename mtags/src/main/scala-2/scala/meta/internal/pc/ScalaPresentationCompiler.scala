@@ -199,15 +199,14 @@ case class ScalaPresentationCompiler(
   override def didChange(
       params: VirtualFileParams
   ): CompletableFuture[ju.List[Diagnostic]] = {
-    println("TTTTTTTTTTTTTTTTTTTTTTTTTTTTTT")
-    val result: CompletableFuture[ju.List[Diagnostic]] = compilerAccess.withNonInterruptableCompiler(
-      List.empty[Diagnostic].asJava,
-      params.token
-    ) (temp(_, params))(params.toQueryContext)
-    result.thenApply(x => {
-      pprint.log("Future finished")
-      x
-    })
+    if (params.uri().toAbsolutePath.isSbt) {
+      compilerAccess.withNonInterruptableCompiler(
+        List.empty[Diagnostic].asJava,
+        params.token
+      ) (temp(_, params))(params.toQueryContext)
+    } else {
+      CompletableFuture.completedFuture(List.empty.asJava)
+    }
   }
 
   def didClose(uri: URI): Unit = {
