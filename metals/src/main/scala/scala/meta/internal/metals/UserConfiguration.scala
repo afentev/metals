@@ -41,7 +41,6 @@ case class UserConfiguration(
     bloopSbtAlreadyInstalled: Boolean = false,
     bloopVersion: Option[String] = None,
     bloopJvmProperties: Option[List[String]] = None,
-    ammoniteJvmProperties: Option[List[String]] = None,
     superMethodLensesEnabled: Boolean = false,
     inlayHintsOptions: InlayHintsOptions = InlayHintsOptions(Map.empty),
     enableStripMarginOnTypeFormatting: Boolean = true,
@@ -57,6 +56,9 @@ case class UserConfiguration(
     automaticImportBuild: AutoImportBuildKind = AutoImportBuildKind.Off,
     scalaCliLauncher: Option[String] = None,
     defaultBspToBuildTool: Boolean = false,
+    enableBestEffort: Boolean = false,
+    defaultShell: Option[String] = None,
+    startMcpServer: Boolean = false,
 ) {
 
   override def toString(): String = {
@@ -101,7 +103,6 @@ case class UserConfiguration(
       Some(("bloopSbtAlreadyInstalled", bloopSbtAlreadyInstalled)),
       optStringField("bloopVersion", bloopVersion),
       listField("bloopJvmProperties", bloopJvmProperties),
-      listField("ammoniteJvmProperties", ammoniteJvmProperties),
       Some(("superMethodLensesEnabled", superMethodLensesEnabled)),
       mapField("inlayHintsOptions", inlayHintsOptions.options),
       Some(
@@ -141,6 +142,18 @@ case class UserConfiguration(
         (
           "defaultBspToBuildTool",
           defaultBspToBuildTool,
+        )
+      ),
+      Some(
+        (
+          "enableBestEffort",
+          enableBestEffort,
+        )
+      ),
+      Some(
+        (
+          "startMcpServer",
+          startMcpServer,
         )
       ),
     ).flatten.toMap.asJava
@@ -251,15 +264,6 @@ object UserConfiguration {
           |""".stripMargin,
       ),
       UserConfigurationOption(
-        "ammonite-jvm-properties",
-        """`[]`.""",
-        """["-Xmx1G"]""",
-        "Ammonite JVM Properties",
-        """|Optional list of JVM properties to pass along to the Ammonite server.
-           |Each property needs to be a separate item.\n\nExample: `-Xmx1G` or `-Xms100M`"
-           |""".stripMargin,
-      ),
-      UserConfigurationOption(
         "excluded-packages",
         """`[]`.""",
         """["akka.actor.typed.javadsl"]""",
@@ -321,6 +325,26 @@ object UserConfiguration {
         "Should display type annotations for inferred types",
         """|When this option is enabled, each method that can have inferred types has them
            |displayed either as additional decorations if they are supported by the editor or
+           |shown in the hover.
+           |""".stripMargin,
+      ),
+      UserConfigurationOption(
+        "inlay-hints.named-parameters.enable",
+        "false",
+        "false",
+        "Should display parameter names next to arguments",
+        """|When this option is enabled, each method has an added parameter name next to its arguments
+           |displayed either as additional decorations if they are supported by the editor or 
+           |shown in the hover.
+           |""".stripMargin,
+      ),
+      UserConfigurationOption(
+        "inlay-hints.by-name-parameters.enable",
+        "false",
+        "false",
+        "Should display if a parameter is by-name at usage sites",
+        """|When this option is enabled, each method that has by-name parameters has them 
+           |displayed either as additional '=>' decorations if they are supported by the editor or 
            |shown in the hover.
            |""".stripMargin,
       ),
@@ -389,7 +413,7 @@ object UserConfiguration {
         "Default fallback Scala version",
         """|The Scala compiler version that is used as the default or fallback in case a file 
            |doesn't belong to any build target or the specified Scala version isn't supported by Metals.
-           |This applies to standalone Scala files, worksheets, and Ammonite scripts.
+           |This applies to standalone Scala files, worksheets and Scala CLI scripts.
         """.stripMargin,
       ),
       UserConfigurationOption(
@@ -464,6 +488,34 @@ object UserConfiguration {
         "Default to using build tool as your build server.",
         """|If your build tool can also serve as a build server,
            |default to using it instead of Bloop.
+           |""".stripMargin,
+      ),
+      UserConfigurationOption(
+        "enable-best-effort",
+        "false",
+        "true",
+        "Use best effort compilation for Scala 3.",
+        """|When using Scala 3, use best effort compilation to improve Metals 
+           |correctness when the workspace doesn't compile.
+           |""".stripMargin,
+      ),
+      UserConfigurationOption(
+        "default-shell",
+        """empty string `""`.""",
+        "/usr/bin/fish",
+        "Full path to the shell executable to be used as the default",
+        """|Optionally provide a default shell executable to use for build operations.
+           |This allows customizing the shell environment before build execution.
+           |When specified, must use absolute path to the shell.
+           |The configured shell will be used for all build-related subprocesses.
+           |""".stripMargin,
+      ),
+      UserConfigurationOption(
+        "start-mcp-server",
+        "false",
+        "true",
+        "Start MCP server",
+        """|If Metals should start the MCP (SSE) server, that an AI agent can connect to.
            |""".stripMargin,
       ),
     )
@@ -653,11 +705,12 @@ object UserConfiguration {
     val worksheetCancelTimeout =
       getIntKey("worksheet-cancel-timeout")
         .getOrElse(default.worksheetCancelTimeout)
-    val ammoniteProperties = getStringListKey("ammonite-jvm-properties")
     val bloopSbtAlreadyInstalled =
       getBooleanKey("bloop-sbt-already-installed").getOrElse(false)
     val bloopVersion =
       getStringKey("bloop-version")
+    val defaultShell =
+      getStringKey("default-shell")
     val bloopJvmProperties = getStringListKey("bloop-jvm-properties")
     val superMethodLensesEnabled =
       getBooleanKey("super-method-lenses-enabled").getOrElse(false)
@@ -739,6 +792,10 @@ object UserConfiguration {
     val defaultBspToBuildTool =
       getBooleanKey("default-bsp-to-build-tool").getOrElse(false)
 
+    val enableBestEffort =
+      getBooleanKey("enable-best-effort").getOrElse(false)
+
+    val startMcpServer = getBooleanKey("start-mcp-server").getOrElse(false)
     if (errors.isEmpty) {
       Right(
         UserConfiguration(
@@ -755,7 +812,6 @@ object UserConfiguration {
           bloopSbtAlreadyInstalled,
           bloopVersion,
           bloopJvmProperties,
-          ammoniteProperties,
           superMethodLensesEnabled,
           inlayHintsOptions,
           enableStripMarginOnTypeFormatting,
@@ -771,6 +827,9 @@ object UserConfiguration {
           autoImportBuilds,
           scalaCliLauncher,
           defaultBspToBuildTool,
+          enableBestEffort,
+          defaultShell,
+          startMcpServer,
         )
       )
     } else {

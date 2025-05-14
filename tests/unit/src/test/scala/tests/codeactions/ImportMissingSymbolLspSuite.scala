@@ -3,9 +3,18 @@ package tests.codeactions
 import scala.meta.internal.metals.codeactions.ConvertToNamedArguments
 import scala.meta.internal.metals.codeactions.CreateNewSymbol
 import scala.meta.internal.metals.codeactions.ImportMissingSymbol
+import scala.meta.internal.metals.codeactions.ImportMissingSymbolQuickFix
+import scala.meta.internal.metals.codeactions.SourceAddMissingImports
+
+import org.eclipse.lsp4j.CodeActionKind
 
 class ImportMissingSymbolLspSuite
     extends BaseCodeActionLspSuite("importMissingSymbol") {
+
+  // ---------------------------------------------------------------------------
+  // Tests for ImportMissingSymbolQuickFix (CodeActionKind.QuickFix)
+  // These tests verify the existing behavior for manual import resolution
+  // ---------------------------------------------------------------------------
 
   check(
     "basic",
@@ -26,6 +35,67 @@ class ImportMissingSymbolLspSuite
        |  val f = Future.successful(2)
        |}
        |""".stripMargin,
+    kind = List(ImportMissingSymbolQuickFix.kind),
+  )
+
+  check(
+    "all-mixed",
+    """|package a
+       |
+       |object A {
+       |  <<val f = Future.successful(2)
+       |  val t: Future[Unit] = Promise[Unit]().future>>
+       |}
+       |""".stripMargin,
+    s"""|${ImportMissingSymbol.allSymbolsTitle}
+        |${ImportMissingSymbol.title("Future", "scala.concurrent")}
+        |${ImportMissingSymbol.title("Promise", "scala.concurrent")}
+        |${ImportMissingSymbol.title("Promise", "scala.concurrent.impl")}
+        |${CreateNewSymbol.title("Future")}
+        |${CreateNewSymbol.title("Promise")}
+        |""".stripMargin,
+    """|package a
+       |
+       |import scala.concurrent.Future
+       |
+       |object A {
+       |  val f = Future.successful(2)
+       |  val t: Future[Unit] = Promise[Unit]().future
+       |}
+       |""".stripMargin,
+    expectNoDiagnostics = false,
+    kind = List(ImportMissingSymbolQuickFix.kind),
+  )
+
+  check(
+    "all-mixed-rename",
+    """|package a
+       |
+       |import scala.{concurrent => cu}
+       |
+       |object A {
+       |  <<val f = Future.successful(2)
+       |  val t: Future[Unit] = Promise[Unit]().future>>
+       |}
+       |""".stripMargin,
+    s"""|${ImportMissingSymbol.allSymbolsTitle}
+        |${ImportMissingSymbol.title("Future", "scala.concurrent")}
+        |${ImportMissingSymbol.title("Promise", "scala.concurrent")}
+        |${ImportMissingSymbol.title("Promise", "scala.concurrent.impl")}
+        |${CreateNewSymbol.title("Future")}
+        |${CreateNewSymbol.title("Promise")}
+        |""".stripMargin,
+    """|package a
+       |
+       |import scala.{concurrent => cu}
+       |
+       |object A {
+       |  val f = cu.Future.successful(2)
+       |  val t: cu.Future[Unit] = Promise[Unit]().future
+       |}
+       |""".stripMargin,
+    expectNoDiagnostics = false,
+    kind = List(ImportMissingSymbolQuickFix.kind),
   )
 
   check(
@@ -47,6 +117,7 @@ class ImportMissingSymbolLspSuite
        |  val f = Future.successful(2)
        |}
        |""".stripMargin,
+    kind = List(ImportMissingSymbolQuickFix.kind),
   )
 
   check(
@@ -70,6 +141,7 @@ class ImportMissingSymbolLspSuite
        |  val g = Try{}
        |}
        |""".stripMargin,
+    kind = List(ImportMissingSymbolQuickFix.kind),
   )
 
   check(
@@ -81,7 +153,8 @@ class ImportMissingSymbolLspSuite
        |  val b = ListBuffer.newBuilder[Int]
        |}
        |""".stripMargin,
-    s"""|${ImportMissingSymbol.title("Future", "scala.concurrent")}
+    s"""|${ImportMissingSymbol.allSymbolsTitle}
+        |${ImportMissingSymbol.title("Future", "scala.concurrent")}
         |${ImportMissingSymbol.title("Future", "java.util.concurrent")}
         |${ImportMissingSymbol.title("Instant", "java.time")}
         |${CreateNewSymbol.title("Future")}
@@ -97,6 +170,8 @@ class ImportMissingSymbolLspSuite
        |}
        |""".stripMargin,
     expectNoDiagnostics = false,
+    selectedActionIndex = 1,
+    kind = List(ImportMissingSymbolQuickFix.kind),
   )
 
   check(
@@ -129,6 +204,8 @@ class ImportMissingSymbolLspSuite
        |}
        |""".stripMargin,
     expectNoDiagnostics = false,
+    kind =
+      List(ImportMissingSymbolQuickFix.kind, CodeActionKind.RefactorRewrite),
   )
 
   check(
@@ -164,6 +241,7 @@ class ImportMissingSymbolLspSuite
        |}
        |""".stripMargin,
     expectNoDiagnostics = false,
+    kind = List(ImportMissingSymbolQuickFix.kind),
   )
 
   check(
@@ -199,6 +277,7 @@ class ImportMissingSymbolLspSuite
        |}
        |""".stripMargin,
     expectNoDiagnostics = false,
+    kind = List(ImportMissingSymbolQuickFix.kind),
   )
 
   check(
@@ -228,6 +307,8 @@ class ImportMissingSymbolLspSuite
        |}
        |""".stripMargin,
     expectNoDiagnostics = false,
+    kind =
+      List(ImportMissingSymbolQuickFix.kind, CodeActionKind.RefactorRewrite),
   )
 
   check(
@@ -256,6 +337,7 @@ class ImportMissingSymbolLspSuite
        |  }
        |}
        |""".stripMargin,
+    kind = List(ImportMissingSymbolQuickFix.kind),
   )
 
   check(
@@ -281,6 +363,7 @@ class ImportMissingSymbolLspSuite
        |  ) extends Foo
        |}
        |""".stripMargin,
+    kind = List(ImportMissingSymbolQuickFix.kind),
   )
 
   check(
@@ -312,6 +395,7 @@ class ImportMissingSymbolLspSuite
         |  }
         |}
         |""".stripMargin,
+    kind = List(ImportMissingSymbolQuickFix.kind),
   )
 
   check(
@@ -340,6 +424,7 @@ class ImportMissingSymbolLspSuite
         |}
         |""".stripMargin,
     expectNoDiagnostics = false,
+    kind = List(ImportMissingSymbolQuickFix.kind),
     filterAction = _.getTitle() == ImportMissingSymbol.title("A", "example.a"),
   )
 
@@ -370,5 +455,136 @@ class ImportMissingSymbolLspSuite
         |""".stripMargin,
     expectNoDiagnostics = false,
     filterAction = _.getTitle() == ImportMissingSymbol.title("A", "example.a"),
+    kind = List(ImportMissingSymbolQuickFix.kind),
+  )
+
+  // ---------------------------------------------------------------------------
+  // Tests for SourceAddMissingImports (source.addMissingImports)
+  // These tests verify the auto-import behavior that only imports unambiguous symbols
+  // ---------------------------------------------------------------------------
+
+  check(
+    "source-add-missing-imports-single-unambiguous",
+    """|package a
+       |
+       |object <<A>> {
+       |  val i = Instant.now
+       |}
+       |""".stripMargin,
+    s"""|${SourceAddMissingImports.title}
+        |""".stripMargin,
+    """|package a
+       |
+       |import java.time.Instant
+       |
+       |object A {
+       |  val i = Instant.now
+       |}
+       |""".stripMargin,
+    kind = List(SourceAddMissingImports.kind),
+  )
+
+  check(
+    "source-add-missing-imports-multiple-unambiguous",
+    """|package a
+       |
+       |object <<A>> {
+       |  val i = Instant.now
+       |  val b = ListBuffer.newBuilder[Int]
+       |}
+       |""".stripMargin,
+    s"""|${SourceAddMissingImports.title}
+        |""".stripMargin,
+    """|package a
+       |
+       |import java.time.Instant
+       |import scala.collection.mutable.ListBuffer
+       |
+       |object A {
+       |  val i = Instant.now
+       |  val b = ListBuffer.newBuilder[Int]
+       |}
+       |""".stripMargin,
+    kind = List(SourceAddMissingImports.kind),
+  )
+
+  check(
+    "source-add-missing-imports-skip-ambiguous",
+    """|package a
+       |
+       |object A {
+       |  <<val f: Future[Int] = ???
+       |  val i = Instant.now>>
+       |}
+       |""".stripMargin,
+    s"""|${SourceAddMissingImports.title}
+        |""".stripMargin,
+    """|package a
+       |
+       |import java.time.Instant
+       |
+       |object A {
+       |  val f: Future[Int] = ???
+       |  val i = Instant.now
+       |}
+       |""".stripMargin,
+    kind = List(SourceAddMissingImports.kind),
+    expectNoDiagnostics = false,
+    filterAction = _.getTitle() == SourceAddMissingImports.title,
+  )
+
+  check(
+    "source-add-missing-imports-mixed-symbols",
+    """|package a
+       |
+       |object A {
+       |  <<val i = Instant.now
+       |  val f: Future[Int] = ???
+       |  val p = Path.of("/tmp")
+       |  val b = ListBuffer.newBuilder[Int]>>
+       |}
+       |""".stripMargin,
+    s"""|${SourceAddMissingImports.title}
+        |""".stripMargin,
+    """|package a
+       |
+       |import java.nio.file.Path
+       |import java.time.Instant
+       |import scala.collection.mutable.ListBuffer
+       |
+       |object A {
+       |  val i = Instant.now
+       |  val f: Future[Int] = ???
+       |  val p = Path.of("/tmp")
+       |  val b = ListBuffer.newBuilder[Int]
+       |}
+       |""".stripMargin,
+    kind = List(SourceAddMissingImports.kind),
+    expectNoDiagnostics = false,
+    filterAction = _.getTitle() == SourceAddMissingImports.title,
+  )
+
+  check(
+    "source-add-missing-imports-no-action-when-only-ambiguous",
+    """|package a
+       |
+       |object A {
+       |  <<val f: Future[Int] = ???>>
+       |}
+       |""".stripMargin,
+    s"""|${ImportMissingSymbol.title("Future", "scala.concurrent")}
+        |${ImportMissingSymbol.title("Future", "java.util.concurrent")}
+        |${CreateNewSymbol.title("Future")}
+        |""".stripMargin,
+    """|package a
+       |
+       |import java.util.concurrent.Future
+       |
+       |object A {
+       |  val f: Future[Int] = ???
+       |}
+       |""".stripMargin,
+    selectedActionIndex = 1,
+    expectNoDiagnostics = false,
   )
 }

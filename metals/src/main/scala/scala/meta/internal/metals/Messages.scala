@@ -124,6 +124,7 @@ object Messages {
     MessageType.Warning,
     s"Import already running. \nPlease cancel the current import to run a new one.",
   )
+
   val ImportProjectPartiallyFailed = new MessageParams(
     MessageType.Warning,
     "Import project partially failed, limited functionality may work in some parts of the workspace. " +
@@ -460,29 +461,6 @@ object Messages {
       params.setActions(
         List(
           reconnect,
-          notNow,
-        ).asJava
-      )
-      params
-    }
-  }
-
-  object AmmoniteJvmParametersChange {
-    def restart: MessageActionItem =
-      new MessageActionItem("Restart Ammonite")
-
-    def notNow: MessageActionItem =
-      new MessageActionItem("Not now")
-
-    def params(): ShowMessageRequestParams = {
-      val params = new ShowMessageRequestParams()
-      params.setMessage(
-        s"Ammonite JVM parameters have been updated, do you want to restart the ammonite BSP server? (the changes will only be picked up after the restart)"
-      )
-      params.setType(MessageType.Info)
-      params.setActions(
-        List(
-          restart,
           notNow,
         ).asJava
       )
@@ -870,13 +848,11 @@ object Messages {
   object ImportScalaScript {
     val message: String = "Scala script detected. Import it as…"
     val doImportScalaCli: String = "Scala CLI"
-    val doImportAmmonite: String = "Ammonite"
     val dismiss: String = "Dismiss"
     def params(): ShowMessageRequestParams = {
       val params = new ShowMessageRequestParams(
         List(
           doImportScalaCli,
-          doImportAmmonite,
           dismiss,
         )
           .map(new MessageActionItem(_))
@@ -895,11 +871,6 @@ object Messages {
       new MessageParams(
         MessageType.Info,
         "Scala CLI project imported.",
-      )
-    def ImportedAmmonite =
-      new MessageParams(
-        MessageType.Info,
-        "Ammonite project imported.",
       )
   }
 

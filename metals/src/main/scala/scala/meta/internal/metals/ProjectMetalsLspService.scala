@@ -3,6 +3,7 @@ package scala.meta.internal.metals
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContextExecutorService
@@ -19,15 +20,19 @@ import scala.meta.internal.builds.BuildTools
 import scala.meta.internal.builds.ScalaCliBuildTool
 import scala.meta.internal.builds.ShellRunner
 import scala.meta.internal.metals.MetalsEnrichments._
-import scala.meta.internal.metals.ammonite.Ammonite
 import scala.meta.internal.metals.clients.language.ConfiguredLanguageClient
 import scala.meta.internal.metals.doctor.HeadDoctor
 import scala.meta.internal.metals.doctor.MetalsServiceInfo
+import scala.meta.internal.metals.mcp.McpQueryEngine
+import scala.meta.internal.metals.mcp.McpSymbolSearch
+import scala.meta.internal.metals.mcp.McpTestRunner
+import scala.meta.internal.metals.mcp.MetalsMcpServer
 import scala.meta.internal.metals.watcher.FileWatcherEvent
 import scala.meta.internal.metals.watcher.FileWatcherEvent.EventType
 import scala.meta.internal.metals.watcher.ProjectFileWatcher
 import scala.meta.internal.mtags.SemanticdbPath
 import scala.meta.internal.mtags.Semanticdbs
+import scala.meta.internal.parsing.ClassFinder
 import scala.meta.internal.tvp.FolderTreeViewProvider
 import scala.meta.io.AbsolutePath
 
@@ -46,7 +51,6 @@ class ProjectMetalsLspService(
     override val clientConfig: ClientConfiguration,
     override val statusBar: StatusBar,
     focusedDocument: () => Option[AbsolutePath],
-    shellRunner: ShellRunner,
     override val timerProvider: TimerProvider,
     initTreeView: () => Unit,
     override val folder: AbsolutePath,
@@ -64,7 +68,6 @@ class ProjectMetalsLspService(
       clientConfig,
       statusBar,
       focusedDocument,
-      shellRunner,
       timerProvider,
       folder,
       folderVisibleName,
@@ -104,6 +107,23 @@ class ProjectMetalsLspService(
       },
     )
   )
+
+  override val shellRunner: ShellRunner = register {
+    new ShellRunner(time, workDoneProgress, () => userConfig)
+  }
+
+  override protected def fileDecoderProvider: FileDecoderProvider =
+    new FileDecoderProvider(
+      folder,
+      compilers,
+      buildTargets,
+      () => userConfig,
+      shellRunner,
+      optFileSystemSemanticdbs,
+      interactiveSemanticdbs,
+      languageClient,
+      new ClassFinder(trees),
+    )
 
   protected val bspConfigGenerator: BspConfigGenerator = new BspConfigGenerator(
     folder,
@@ -200,6 +220,55 @@ class ProjectMetalsLspService(
     }
   }
 
+  private val isMcpServerRunning = new AtomicBoolean(false)
+
+  lazy val mcpSearch = new McpSymbolSearch(
+    definitionIndex,
+    buildTargets,
+    workspaceSymbols,
+  )
+
+  lazy val queryEngine =
+    new McpQueryEngine(
+      compilers,
+      symbolDocs,
+      buildTargets,
+      referencesProvider,
+      scalaVersionSelector,
+      mcpSearch,
+    )
+
+  lazy val mcpTestRunner =
+    new McpTestRunner(
+      debugProvider,
+      buildTargets,
+      folder,
+      () => userConfig,
+      mcpSearch,
+    )
+
+  def startMcpServer(): Future[Unit] =
+    Future {
+      if (!isMcpServerRunning.getAndSet(true))
+        register(
+          new MetalsMcpServer(
+            queryEngine,
+            folder,
+            compilations,
+            () => focusedDocument,
+            diagnostics,
+            buildTargets,
+            mcpTestRunner,
+            initializeParams.getClientInfo().getName(),
+            getVisibleName,
+            languageClient,
+            connectionProvider,
+          )
+        ).run()
+    }.recover { case e: Exception =>
+      scribe.error("Error starting MCP server", e)
+    }
+
   override def didChange(
       params: DidChangeTextDocumentParams
   ): CompletableFuture[Unit] = {
@@ -256,13 +325,19 @@ class ProjectMetalsLspService(
     } else Future.successful(())
   }
 
-  protected def onInitialized(): Future[Unit] =
-    connectionProvider.withWillGenerateBspConfig {
+  protected def onInitialized(): Future[Unit] = {
+    val startMcp =
+      if (userConfig.startMcpServer) startMcpServer()
+      else Future.unit
+
+    val setUpScalaCli = connectionProvider.withWillGenerateBspConfig {
       for {
         _ <- maybeSetupScalaCli()
         _ <- connectionProvider.fullConnect()
       } yield ()
     }
+    Future.sequence(List(startMcp, setUpScalaCli)).ignoreValue
+  }
 
   def onBuildChangedUnbatched(
       paths: Seq[AbsolutePath]
@@ -351,7 +426,7 @@ class ProjectMetalsLspService(
   ): Future[Unit] = {
     def isScalaCli = bspSession.exists(_.main.isScalaCLI)
     def isScalaFile =
-      file.toString.isScala || file.isJava || file.isAmmoniteScript
+      file.toString.isScala || file.isJava
     if (
       isScalaCli && isScalaFile &&
       buildTargets.inverseSources(file).isEmpty &&
@@ -419,28 +494,6 @@ class ProjectMetalsLspService(
     }
   }
 
-  private val ammonite: Ammonite = register {
-    val amm = new Ammonite(
-      buffers,
-      compilers,
-      compilations,
-      workDoneProgress,
-      diagnostics,
-      tables,
-      languageClient,
-      buildClient,
-      () => userConfig,
-      () => indexer.index(() => ()),
-      () => folder,
-      focusedDocument,
-      clientConfig.initialConfig,
-      scalaVersionSelector,
-      parseTreesAndPublishDiags,
-    )
-    buildTargets.addData(amm.buildTargetsData)
-    amm
-  }
-
   private val popupChoiceReset: PopupChoiceReset = new PopupChoiceReset(
     tables,
     languageClient,
@@ -479,10 +532,7 @@ class ProjectMetalsLspService(
     }
   }
 
-  def ammoniteStart(): Future[Unit] = ammonite.start()
-  def ammoniteStop(): Future[Unit] = ammonite.stop()
-
-  def switchBspServer(): Future[Unit] =
+  def switchBspServer(): Future[BuildChange] =
     connectionProvider.switchBspServer()
 
   def resetPopupChoice(value: String): Future[Unit] =
@@ -526,12 +576,7 @@ class ProjectMetalsLspService(
         ImportedBuild.fromList(
           bspSession.map(_.lastImportedBuild).getOrElse(Nil)
         ),
-      ),
-      Indexer.BuildTool(
-        "ammonite",
-        ammonite.buildTargetsData,
-        ammonite.lastImportedBuild,
-      ),
+      )
     ) ++ scalaCli.lastImportedBuilds.map {
       case (lastImportedBuild, buildTargetsData) =>
         Indexer
@@ -575,11 +620,7 @@ class ProjectMetalsLspService(
   ): Unit = {
     // Make sure that no compilation is running, if it is it might not get completed properly
     compilations.cancel()
-    val (ammoniteChanges, otherChanges) =
-      params.getChanges.asScala.partition { change =>
-        val connOpt = buildTargets.buildServerOf(change.getTarget)
-        connOpt.nonEmpty && connOpt == ammonite.buildServer
-      }
+    val otherChanges = params.getChanges.asScala
 
     val scalaCliServers = scalaCli.servers
     val groupedByServer = otherChanges.groupBy { change =>
@@ -590,13 +631,6 @@ class ProjectMetalsLspService(
       case (Some(server), _) => server
     }
     val mainConnectionChanges = groupedByServer.get(None)
-
-    if (ammoniteChanges.nonEmpty)
-      ammonite.importBuild().onComplete {
-        case Success(()) =>
-        case Failure(exception) =>
-          scribe.error("Error re-importing Ammonite build", exception)
-      }
 
     importAfterScalaCliChanges(scalaCliAffectedServers)
 
@@ -618,19 +652,27 @@ class ProjectMetalsLspService(
   ): Future[Unit] = {
     val old = userConfig
     super.onUserConfigUpdate(newConfig)
+    val startMcp =
+      if (
+        newConfig.startMcpServer && newConfig.startMcpServer != old.startMcpServer
+      ) startMcpServer()
+      else Future.unit
+
     val slowConnect =
-      if (userConfig.customProjectRoot != old.customProjectRoot) {
+      if (
+        userConfig.customProjectRoot != old.customProjectRoot || userConfig.enableBestEffort != old.enableBestEffort
+      ) {
         tables.buildTool.reset()
         tables.buildServers.reset()
         connectionProvider.fullConnect()
       } else Future.successful(())
 
-    val resetDecorations =
+    def resetDecorations =
       if (userConfig.inlayHintsOptions != old.inlayHintsOptions) {
         languageClient.refreshInlayHints().asScala
       } else Future.successful(())
 
-    val restartBuildServer = bspSession
+    def restartBuildServer = bspSession
       .map { session =>
         if (session.main.isBloop) {
           bloopServers
@@ -653,20 +695,6 @@ class ProjectMetalsLspService(
                 updateBspJavaHome(session)
               } else Future.unit
             }
-        } else if (
-          userConfig.ammoniteJvmProperties != old.ammoniteJvmProperties && buildTargets.allBuildTargetIds
-            .exists(Ammonite.isAmmBuildTarget)
-        ) {
-          languageClient
-            .showMessageRequest(Messages.AmmoniteJvmParametersChange.params())
-            .asScala
-            .flatMap {
-              case item
-                  if item == Messages.AmmoniteJvmParametersChange.restart =>
-                ammonite.reload()
-              case _ =>
-                Future.unit
-            }
         } else if (userConfig.javaHome != old.javaHome) {
           updateBspJavaHome(session)
         } else Future.unit
@@ -675,16 +703,15 @@ class ProjectMetalsLspService(
 
     for {
       _ <- slowConnect
-      _ <- Future.sequence(List(restartBuildServer, resetDecorations))
+      _ <- Future.sequence(List(restartBuildServer, resetDecorations, startMcp))
     } yield ()
   }
 
   def maybeImportScript(path: AbsolutePath): Option[Future[Unit]] = {
     val scalaCliPath = scalaCliDirOrFile(path)
     if (
-      !path.isAmmoniteScript ||
+      !path.isScalaScript ||
       !buildTargets.inverseSources(path).isEmpty ||
-      ammonite.loaded(path) ||
       scalaCli.loaded(scalaCliPath) ||
       isMillBuildFile(path)
     )
@@ -704,23 +731,7 @@ class ProjectMetalsLspService(
             )
             scribe.warn(s"Error importing Scala CLI project $scalaCliPath", e)
           }
-      def doImportAmmonite(): Future[Unit] =
-        ammonite
-          .start(Some(path))
-          .map { _ =>
-            languageClient.showMessage(
-              Messages.ImportScalaScript.ImportedAmmonite
-            )
-          }
-          .recover { e =>
-            languageClient.showMessage(
-              Messages.ImportScalaScript.ImportFailed(path.toString)
-            )
-            scribe.warn(s"Error importing Ammonite script $path", e)
-          }
 
-      val autoImportAmmonite =
-        tables.dismissedNotifications.AmmoniteImportAuto.isDismissed
       val autoImportScalaCli =
         tables.dismissedNotifications.ScalaCliImportAuto.isDismissed
 
@@ -742,9 +753,7 @@ class ProjectMetalsLspService(
           }
 
       val futureRes =
-        if (autoImportAmmonite) {
-          doImportAmmonite()
-        } else if (autoImportScalaCli) {
+        if (autoImportScalaCli) {
           doImportScalaCli()
         } else {
           languageClient
@@ -753,11 +762,6 @@ class ProjectMetalsLspService(
             .flatMap { response =>
               if (response != null)
                 response.getTitle match {
-                  case Messages.ImportScalaScript.doImportAmmonite =>
-                    askAutoImport(
-                      tables.dismissedNotifications.AmmoniteImportAuto
-                    )
-                    doImportAmmonite()
                   case Messages.ImportScalaScript.doImportScalaCli =>
                     askAutoImport(
                       tables.dismissedNotifications.ScalaCliImportAuto

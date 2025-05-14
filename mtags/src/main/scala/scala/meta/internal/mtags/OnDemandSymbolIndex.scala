@@ -9,8 +9,8 @@ import scala.util.control.NonFatal
 import scala.meta.Dialect
 import scala.meta.dialects
 import scala.meta.internal.io.{ListFiles => _}
-import scala.meta.internal.metals.ReportContext
 import scala.meta.io.AbsolutePath
+import scala.meta.pc.reports.ReportContext
 
 /**
  * An implementation of GlobalSymbolIndex with fast indexing and low memory usage.
@@ -142,6 +142,12 @@ final class OnDemandSymbolIndex(
       .flatMap(_.query(querySymbol))
       // prioritize defs where found symbols is exact and comes from scala3
       .sortBy(d => (!d.isExact, d.dialect != dialects.Scala3))
+  }
+
+  def findFileForToplevel(
+      topLevelSymbol: Symbol
+  ): List[(AbsolutePath, Dialect)] = {
+    dialectBuckets.values.flatMap(_.findFileForToplevel(topLevelSymbol)).toList
   }
 
 }

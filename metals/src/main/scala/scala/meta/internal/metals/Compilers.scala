@@ -143,10 +143,10 @@ class Compilers(
   private def fallbackCompiler: PresentationCompiler = {
     jcache
       .compute(
-        PresentationCompilerKey.Default,
+        PresentationCompilerKey.DefaultScala,
         (_, value) => {
           val scalaVersion =
-            scalaVersionSelector.fallbackScalaVersion(isAmmonite = false)
+            scalaVersionSelector.fallbackScalaVersion()
 
           Option(value) match {
             case Some(lazyPc) =>
@@ -169,6 +169,21 @@ class Compilers(
                 Nil,
                 completionItemPriority(),
               )
+          }
+        },
+      )
+      .await
+  }
+
+  private def javaFallbackCompiler: PresentationCompiler = {
+    jcache
+      .compute(
+        PresentationCompilerKey.DefaultJava,
+        (_, value) => {
+          Option(value) match {
+            case Some(lazyPc) => lazyPc
+            case None =>
+              StandaloneJavaCompiler(search, completionItemPriority())
           }
         },
       )
@@ -671,7 +686,9 @@ class Compilers(
         implicitParameters = options.implicitArguments,
         implicitConversions = options.implicitConversions,
         typeParameters = options.typeParameters,
+        byNameParameters = options.byNameParameters,
         hintsInPatternMatch = options.hintsInPatternMatch,
+        namedParameters = options.namedParameters,
       )
 
       pc
@@ -705,6 +722,17 @@ class Compilers(
           list
         }
     }.getOrElse(Future.successful(new CompletionList(Nil.asJava)))
+
+  def completions(
+      id: BuildTargetIdentifier,
+      offsetParams: CompilerOffsetParams,
+  ): Future[CompletionList] = {
+    loadCompiler(id)
+      .map { pc =>
+        pc.complete(offsetParams).asScala
+      }
+      .getOrElse(Future.successful(new CompletionList(Nil.asJava)))
+  }
 
   def autoImports(
       params: TextDocumentPositionParams,
@@ -1154,6 +1182,16 @@ class Compilers(
       ).asScala
     }.getOrElse(Future.successful(new SignatureHelp()))
 
+  def signatureHelp(
+      id: BuildTargetIdentifier,
+      offsetParams: CompilerOffsetParams,
+  ): Future[SignatureHelp] =
+    loadCompiler(id)
+      .map { pc =>
+        pc.signatureHelp(offsetParams).asScala
+      }
+      .getOrElse(Future.successful(new SignatureHelp()))
+
   def selectionRange(
       params: SelectionRangeParams,
       token: CancelToken,
@@ -1202,20 +1240,27 @@ class Compilers(
       target match {
         case None =>
           val tmpDirectory = workspace.resolve(Directories.tmp)
-          val scalaVersion =
-            scalaVersionSelector.fallbackScalaVersion(isAmmonite = false)
-          if (!path.toNIO.startsWith(tmpDirectory.toNIO))
+          if (!path.toNIO.startsWith(tmpDirectory.toNIO)) {
+            val scalaVersionMessage =
+              if (path.isScalaFilename)
+                s"Using presentation compiler with project's scala-library version: ${scalaVersionSelector.fallbackScalaVersion()}"
+              else "Using fallback presentation compiler."
             scribe.info(
-              s"no build target found for $path. Using presentation compiler with project's scala-library version: ${scalaVersion}"
+              s"no build target found for $path. $scalaVersionMessage"
             )
-          Some(fallbackCompiler)
+          }
+          val fallback =
+            if (path.isScalaFilename) fallbackCompiler else javaFallbackCompiler
+          Some(fallback)
         case Some(value) =>
-          if (path.isScalaFilename) loadCompiler(value)
+          if (path.isScalaFilename)
+            Some(loadCompiler(value).getOrElse(fallbackCompiler))
           else if (path.isJavaFilename && forceScala)
             loadCompiler(value)
               .orElse(Some(loadJavaCompiler(value)))
           else if (path.isJavaFilename) Some(loadJavaCompiler(value))
           else None
+        case _ => None
       }
     }
 
@@ -1287,7 +1332,7 @@ class Compilers(
       jworksheetsCache.put(
         path, {
           val scalaVersion =
-            scalaVersionSelector.fallbackScalaVersion(isAmmonite = false)
+            scalaVersionSelector.fallbackScalaVersion()
           StandaloneCompiler(
             scalaVersion,
             classpath,
@@ -1719,7 +1764,8 @@ object Compilers {
         extends PresentationCompilerKey
     final case class JavaBuildTarget(id: BuildTargetIdentifier)
         extends PresentationCompilerKey
-    case object Default extends PresentationCompilerKey
+    case object DefaultScala extends PresentationCompilerKey
+    case object DefaultJava extends PresentationCompilerKey
   }
 
 }

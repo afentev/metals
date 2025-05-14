@@ -43,8 +43,6 @@ class MetalsGlobal(
     val completionItemPriority: CompletionItemPriority
 ) extends Global(settings, reporter)
     with completions.Completions
-    with completions.AmmoniteFileCompletions
-    with completions.AmmoniteIvyCompletions
     with completions.ArgCompletions
     with completions.FilenameCompletions
     with completions.InterpolatorCompletions
@@ -57,6 +55,7 @@ class MetalsGlobal(
     with completions.DependencyCompletions
     with completions.ScalaCliCompletions
     with completions.MillIvyCompletions
+    with completions.WorksheetIvyCompletions
     with completions.SbtLibCompletions
     with completions.MultilineCommentCompletions
     with Signatures
@@ -598,10 +597,12 @@ class MetalsGlobal(
                 case Descriptor.None =>
                   Nil
                 case Descriptor.Type(value) =>
-                  val member = owner.info.decl(TypeName(value).encode) :: Nil
-                  if (sym.isJava)
-                    owner.info.decl(TermName(value).encode) :: member
-                  else member
+                  val members =
+                    if (sym.isJava)
+                      owner.info.decl(TermName(value).encode) :: Nil
+                    else Nil
+                  // Put the type ahead of the Java-induced term for `inverseSemanticdbSymbol`
+                  owner.info.decl(TypeName(value).encode) :: members
                 case Descriptor.Term(value) =>
                   owner.info.decl(TermName(value).encode) :: Nil
                 case Descriptor.Package(value) =>
@@ -617,7 +618,7 @@ class MetalsGlobal(
                 case Descriptor.Method(value, _) =>
                   owner.info
                     .decl(TermName(value).encode)
-                    .alternatives
+                    .safeAlternatives
                     .iterator
                     .filter(sym => semanticdbSymbol(sym) == s)
                     .toList
@@ -813,7 +814,10 @@ class MetalsGlobal(
         if (defn.symbol.isPackageObject) defn.symbol.enclosingPackageClass.name
         else defn.name
       val start = defn.pos.point
-      val end = start + name.dropLocal.decoded.length()
+      val decoded = name.dropLocal.decoded
+      val hasBackticks = defn.pos.source.content.lift(start).contains('`')
+      val backtickLen = if (hasBackticks) 2 else 0
+      val end = start + decoded.length() + backtickLen
       Position.range(defn.pos.source, start, start, end)
     }
   }
@@ -864,6 +868,22 @@ class MetalsGlobal(
   }
 
   implicit class XtensionSymbolMetals(sym: Symbol) {
+
+    def safeAlternatives: List[Symbol] = {
+      if (sym == NoSymbol) Nil
+      else {
+        sym.info match {
+          case overloadedType: OverloadedType => overloadedType.alternatives
+          case _ if sym.isOverloaded => Nil
+          case _ => sym.alternatives
+        }
+      }
+    }
+
+    def isLocallyDefined: Boolean =
+      sym.ownersIterator
+        .drop(1)
+        .exists(owner => owner.isMethod || owner.isAnonymousFunction)
     def foreachKnownDirectSubClass(fn: Symbol => Unit): Unit = {
       // NOTE(olafur) The logic in this method is fairly involved because `knownDirectSubClasses`
       // returns a lot of redundant and unrelevant symbols in long-running sessions. For example,
@@ -963,9 +983,25 @@ class MetalsGlobal(
       } else {
         other.dealiased == sym.dealiased ||
         other.companion == sym.dealiased ||
-        semanticdbSymbol(other.dealiased) == semanticdbSymbol(sym.dealiased)
+        semanticdbSymbol(other.dealiased) == semanticdbSymbol(sym.dealiased) ||
+        isScalaPackageObjectReexport(other)
       }
     }
+
+    /**
+     * Check if the symbol is a `scala.*` `val` re-export of `other`
+     *
+     * @param other
+     * @return
+     */
+    private def isScalaPackageObjectReexport(other: Symbol): Boolean =
+      sym.tpe match {
+        case NullaryMethodType(resultType: SingleType) =>
+          sym.isDefinedInPackage && sym.isStable &&
+          sym.effectiveOwner.name.toTermName == termNames.scala_ &&
+          resultType =:= other.tpe
+        case _ => false
+      }
 
     def snippetCursor: String =
       sym.paramss match {

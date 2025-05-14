@@ -422,11 +422,13 @@ class DebugProtocolSuite
             ).toJson
           )
           .recover { case e: ResponseErrorException =>
-            e.getMessage()
+            (e.getResponseError().getCode(), e.getMessage())
           }
     } yield assertNoDiff(
       result.toString(),
-      WorkspaceErrorsException.getMessage(),
+      """
+        |(543,Cannot run class, since the workspace has errors.)
+      """.stripMargin,
     )
   }
 
@@ -545,7 +547,7 @@ class DebugProtocolSuite
     } yield assertNoDiff(
       output,
       """|a.Foo
-         |  foo - failed
+         |  foo - failed at Foo.scala, line 6
          |""".stripMargin,
     )
   }

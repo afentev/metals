@@ -27,7 +27,8 @@ final class CodeActionProvider(
 
   private val allActions: List[CodeAction] = List(
     new ImplementAbstractMembers(compilers),
-    new ImportMissingSymbol(compilers, buildTargets),
+    new ImportMissingSymbolQuickFix(compilers, buildTargets),
+    new SourceAddMissingImports(compilers, buildTargets, diagnostics),
     new CreateNewSymbol(compilers, languageClient),
     new ActionableDiagnostic(),
     new StringActions(buffers),
@@ -46,6 +47,9 @@ final class CodeActionProvider(
     new MillifyDependencyCodeAction(buffers),
     new MillifyScalaCliDependencyCodeAction(buffers),
     new ConvertCommentCodeAction(buffers),
+    new RemoveInvalidImportQuickFix(trees, buildTargets),
+    new SourceRemoveInvalidImports(trees, buildTargets, diagnostics),
+    new ConvertToNamedLambdaParameters(trees, compilers),
   )
 
   def actionsForParams(params: l.CodeActionParams): List[CodeAction] = {

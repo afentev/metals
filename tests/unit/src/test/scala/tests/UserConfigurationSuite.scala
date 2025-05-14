@@ -255,7 +255,6 @@ class UserConfigurationSuite extends BaseSuite {
       bloopSbtAlreadyInstalled = true,
       bloopVersion = Some("1.2.3"),
       bloopJvmProperties = Some(List("a", "b", "c")),
-      ammoniteJvmProperties = Some(List("aa", "bb", "cc")),
       superMethodLensesEnabled = true,
       inlayHintsOptions = InlayHintsOptions(
         Map(
@@ -301,15 +300,11 @@ class UserConfigurationSuite extends BaseSuite {
           |    "b",
           |    "c"
           |  ],
-          |  "ammoniteJvmProperties": [
-          |    "aa",
-          |    "bb",
-          |    "cc"
-          |  ],
           |  "enableStripMarginOnTypeFormatting": false,
           |  "gradleScript": "gradle",
           |  "scalafixConfigPath": "$fakePathString",
           |  "superMethodLensesEnabled": true,
+          |  "startMcpServer": false,
           |  "bloopSbtAlreadyInstalled": true,
           |  "symbolPrefixes": {
           |    "java/util/": "hello."
@@ -336,6 +331,7 @@ class UserConfigurationSuite extends BaseSuite {
           |  "verboseCompilation": true,
           |  "worksheetCancelTimeout": 10,
           |  "worksheetScreenWidth": 140,
+          |  "enableBestEffort": false,
           |  "scalafmtConfigPath": "$fakePathString",
           |  "javaHome": "/fake/home"
           |}

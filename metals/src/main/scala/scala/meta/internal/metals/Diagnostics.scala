@@ -66,6 +66,18 @@ final class Diagnostics(
   private val compilationStatus =
     TrieMap.empty[BuildTargetIdentifier, CompilationStatus]
 
+  def forFile(path: AbsolutePath): Seq[Diagnostic] = {
+    diagnostics
+      .getOrElse(path, new ConcurrentLinkedQueue[Diagnostic]())
+      .asScala
+      .toList
+  }
+
+  def allDiagnostics: Seq[(AbsolutePath, Diagnostic)] =
+    diagnostics.toList.flatMap { case (path, queue) =>
+      queue.asScala.map(diag => (path, diag))
+    }
+
   def reset(): Unit = {
     val keys = diagnostics.keys
     diagnostics.clear()
@@ -76,12 +88,6 @@ final class Diagnostics(
     for (path <- paths if diagnostics.contains(path)) {
       diagnostics.remove(path)
       publishDiagnostics(path)
-    }
-
-  def resetAmmoniteScripts(): Unit =
-    for (key <- diagnostics.keys if key.isAmmoniteScript) {
-      diagnostics.remove(key)
-      publishDiagnostics(key)
     }
 
   def onStartCompileBuildTarget(target: BuildTargetIdentifier): Unit = {
@@ -265,6 +271,9 @@ final class Diagnostics(
     }
   }
 
+  def getFileDiagnostics(path: AbsolutePath): List[Diagnostic] =
+    diagnostics.get(path).map(_.asScala.toList).getOrElse(Nil)
+
   private def publishDiagnostics(
       path: AbsolutePath,
       queue: ju.Queue[Diagnostic],
@@ -333,13 +342,15 @@ final class Diagnostics(
             )
             // Scala 3 sets the diagnostic code to -1 for NoExplanation Messages. Ideally
             // this will change and we won't need this check in the future, but for now
-            // let's not forward them.
+            // let's not forward them, since they are not valid for all clients.
             val isScala3NoExplanationDiag = d.getCode() != null && d
               .getCode()
               .isLeft() && d.getCode().getLeft() == "-1"
             if (!isScala3NoExplanationDiag) ld.setCode(d.getCode())
 
             ld.setTags(d.getTags())
+            ld.setRelatedInformation(d.getRelatedInformation)
+            ld.setCodeDescription(d.getCodeDescription())
             adjustedDiagnosticData(d, edit).map(newData => ld.setData(newData))
             ld
           }

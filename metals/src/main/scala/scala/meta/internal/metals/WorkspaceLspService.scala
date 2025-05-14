@@ -147,7 +147,7 @@ class WorkspaceLspService(
   }
 
   private val shellRunner = register {
-    new ShellRunner(time, workDoneProgress)
+    new ShellRunner(time, workDoneProgress, () => UserConfiguration())
   }
 
   private val focusedDocument: AtomicReference[Option[AbsolutePath]] =
@@ -236,7 +236,6 @@ class WorkspaceLspService(
           clientConfig,
           statusBar,
           () => focusedDocument.get(),
-          shellRunner,
           timerProvider,
           initTreeView,
           uri,
@@ -882,10 +881,20 @@ class WorkspaceLspService(
                   }
               }(_ => true)
               .flatMap { mains =>
-                mains.headOption.fold(
+                mains.fold(
                   Future.failed[DebugSessionParams](
-                    DiscoveryFailures
-                      .NoMainClassFoundException(unresolvedParams.mainClass)
+                    Option(unresolvedParams.buildTarget)
+                      .map(buildTarget =>
+                        DiscoveryFailures
+                          .ClassNotFoundInBuildTargetException(
+                            unresolvedParams.mainClass,
+                            buildTarget,
+                          )
+                      )
+                      .getOrElse(
+                        DiscoveryFailures
+                          .NoMainClassFoundException(unresolvedParams.mainClass)
+                      )
                   )
                 )(Future.successful(_))
               }
@@ -945,7 +954,7 @@ class WorkspaceLspService(
         }.asJavaObject
       case ServerCommands.BspSwitch() =>
         onCurrentFolder(
-          _.switchBspServer(),
+          _.switchBspServer().ignoreValue,
           ServerCommands.BspSwitch.title,
         ).asJavaObject
       case ServerCommands.OpenIssue() =>
@@ -964,6 +973,14 @@ class WorkspaceLspService(
           _.cleanCompile(),
           ServerCommands.CleanCompile.title,
         ).asJavaObject
+      case ServerCommands.CompileTarget(target) =>
+        onCurrentFolder(
+          _.compileTarget(target),
+          ServerCommands.CompileTarget.title,
+          false,
+          () =>
+            null, // shouldn't happen, but json null is fine as a default here
+        ).liftToLspError.asJavaObject
       case ServerCommands.CancelCompile() =>
         foreachSeqIncludeFallback(_.cancelCompile(), ignoreValue = true)
       case ServerCommands.PresentationCompilerRestart() =>
@@ -1149,14 +1166,6 @@ class WorkspaceLspService(
           .map(getServiceFor)
           .getOrElse(fallbackService)
           .createFile(directoryURI, name, fileType, isScala = false)
-      case ServerCommands.StartAmmoniteBuildServer() =>
-        val res = for {
-          path <- focusedDocument.get()
-          service <- getServiceForOpt(path)
-        } yield service.ammoniteStart()
-        res.getOrElse(Future.unit).asJavaObject
-      case ServerCommands.StopAmmoniteBuildServer() =>
-        foreachSeq(_.ammoniteStop(), ignoreValue = false)
       case ServerCommands.StartScalaCliServer() =>
         val res = focusedDocument.get() match {
           case None => Future.unit
@@ -1234,7 +1243,10 @@ class WorkspaceLspService(
         capabilities.setRenameProvider(renameOptions)
         capabilities.setDocumentHighlightProvider(true)
         capabilities.setDocumentOnTypeFormattingProvider(
-          new lsp4j.DocumentOnTypeFormattingOptions("\n", List("\"").asJava)
+          new lsp4j.DocumentOnTypeFormattingOptions(
+            "\n",
+            List("\"", "{").asJava,
+          )
         )
         capabilities.setDocumentRangeFormattingProvider(
           initialServerConfig.allowMultilineStringFormatting
@@ -1259,6 +1271,7 @@ class WorkspaceLspService(
             List(
               lsp4j.CodeActionKind.QuickFix,
               lsp4j.CodeActionKind.Refactor,
+              lsp4j.CodeActionKind.Source,
               lsp4j.CodeActionKind.SourceOrganizeImports,
             ).asJava
           )

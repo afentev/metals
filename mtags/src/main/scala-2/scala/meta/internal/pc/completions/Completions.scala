@@ -17,7 +17,6 @@ import scala.meta.internal.pc.IdentifierComparator
 import scala.meta.internal.pc.InterpolationSplice
 import scala.meta.internal.pc.MemberOrdering
 import scala.meta.internal.pc.MetalsGlobal
-import scala.meta.internal.semanticdb.Scala._
 
 import org.eclipse.{lsp4j => l}
 
@@ -77,6 +76,25 @@ trait Completions { this: MetalsGlobal =>
       val additionalTextEdits: List[l.TextEdit] = Nil,
       val commitCharacter: Option[String] = None
   ) extends ScopeMember(sym, NoType, true, EmptyTree)
+
+  class CasePatternMember(
+      override val filterText: String,
+      override val edit: l.TextEdit,
+      sym: Symbol,
+      override val label: Option[String] = None,
+      override val detail: Option[String] = None,
+      override val command: Option[String] = None,
+      override val additionalTextEdits: List[l.TextEdit] = Nil
+  ) extends TextEditMember(
+        filterText,
+        edit,
+        sym,
+        label,
+        detail,
+        command,
+        additionalTextEdits,
+        None
+      )
 
   val packageSymbols: mutable.Map[String, Option[Symbol]] =
     mutable.Map.empty[String, Option[Symbol]]
@@ -336,7 +354,7 @@ trait Completions { this: MetalsGlobal =>
     else Nil
   }
   def dealiasedValForwarder(sym: Symbol): List[Symbol] = {
-    if (sym.isValue && sym.hasRawInfo && !semanticdbSymbol(sym).isLocal) {
+    if (sym.isValue && sym.hasRawInfo && !sym.isLocallyDefined) {
       sym.rawInfo match {
         case SingleType(_, dealias) if dealias.isModule =>
           dealias :: dealias.companion :: Nil
@@ -583,14 +601,8 @@ trait Completions { this: MetalsGlobal =>
           isCandidate
         )
       case (imp @ Import(select, selector)) :: _
-          if isAmmoniteFileCompletionPosition(imp, pos) =>
-        AmmoniteFileCompletion(select, selector, pos, editRange)
-      case (imp @ Import(select, selector)) :: _
-          if isAmmoniteIvyCompletionPosition(
-            imp,
-            pos
-          ) || isWorksheetIvyCompletionPosition(imp, pos) =>
-        AmmoniteIvyCompletion(
+          if isWorksheetIvyCompletionPosition(imp, pos) =>
+        WorksheetIvyCompletion(
           coursierComplete,
           select,
           selector,
@@ -609,26 +621,6 @@ trait Completions { this: MetalsGlobal =>
         )
     }
   }
-
-  private def isAmmoniteCompletionPosition(
-      magicImport: String,
-      tree: Tree,
-      pos: Position
-  ): Boolean = {
-    tree match {
-      case Import(select, _) =>
-        pos.source.file.name.isAmmoniteGeneratedFile && select
-          .toString()
-          .startsWith(magicImport)
-      case _ => false
-    }
-  }
-
-  def isAmmoniteFileCompletionPosition(tree: Tree, pos: Position): Boolean =
-    isAmmoniteCompletionPosition("$file", tree, pos)
-
-  def isAmmoniteIvyCompletionPosition(tree: Tree, pos: Position): Boolean =
-    isAmmoniteCompletionPosition("$ivy", tree, pos)
 
   def isWorksheetIvyCompletionPosition(tree: Tree, pos: Position): Boolean =
     tree match {
@@ -716,6 +708,9 @@ trait Completions { this: MetalsGlobal =>
       lastVisitedParentTrees = Nil
       traverse(root)
       lastVisitedParentTrees match {
+        case _ :: (sel @ Select(qual, name)) :: _
+            if name == termNames.unapply && qual.pos.includes(pos) =>
+          sel
         case head :: _ => head
         case _ => EmptyTree
       }
@@ -748,6 +743,10 @@ trait Completions { this: MetalsGlobal =>
               Option(qual.symbol).exists(sym => sym.isValue && sym.isSynthetic)
             qualifierIsSyntheticVal &&
             !sel.namePosition.isTransparent && sel.namePosition.encloses(pos)
+          // val (foo, bar) = (???, ???)
+          // gets desugared case match
+          case b @ Bind(_, Ident(_)) =>
+            !b.namePosition.isTransparent && b.namePosition.encloses(pos)
           case _ => false
         }
       }
@@ -838,7 +837,7 @@ trait Completions { this: MetalsGlobal =>
       definitions.PredefModule,
       TermName("valueOf")
     )
-  ).flatMap(_.alternatives)
+  ).flatMap(_.safeAlternatives)
 
   lazy val renameConfig: collection.Map[Symbol, Name] =
     metalsConfig

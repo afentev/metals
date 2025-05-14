@@ -11,7 +11,9 @@ import scala.meta.internal.mtags.ScalametaCommonEnrichments._
 import scala.meta.internal.semanticdb.Language
 import scala.meta.internal.semanticdb.SymbolInformation
 import scala.meta.internal.semanticdb.SymbolOccurrence
+import scala.meta.internal.tokenizers.UnexpectedInputEndException
 import scala.meta.internal.{semanticdb => s}
+import scala.meta.pc.reports.ReportContext
 import scala.meta.tokenizers.TokenizeException
 
 import org.eclipse.{lsp4j => l}
@@ -80,7 +82,7 @@ object SemanticdbDefinition {
         }
         try mtags.indexRoot()
         catch {
-          case _: TokenizeException =>
+          case _: TokenizeException | _: UnexpectedInputEndException =>
             () // ignore because we don't need to index untokenizable files.
         }
         Some(mtags)

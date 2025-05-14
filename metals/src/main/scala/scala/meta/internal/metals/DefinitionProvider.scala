@@ -78,12 +78,6 @@ final class DefinitionProvider(
   val scaladocDefinitionProvider =
     new ScaladocDefinitionProvider(buffers, trees, destinationProvider)
 
-  private def isAmmonnite(path: AbsolutePath): Boolean =
-    path.isAmmoniteScript && buildTargets
-      .inverseSources(path)
-      .flatMap(buildTargets.targetData)
-      .exists(_.isAmmonite)
-
   def definition(
       path: AbsolutePath,
       params: TextDocumentPositionParams,
@@ -141,8 +135,7 @@ final class DefinitionProvider(
         ) && // LTS 3.3.7 will include fixes from 3.7.x
         SemVer.isCompatibleVersion("3.3.7", scalaVersion)
 
-    val shouldUseOldOrder =
-      isAmmonnite(path) || isScala3 && !scala3DefinitionBugFixed
+    val shouldUseOldOrder = isScala3 && !scala3DefinitionBugFixed
 
     val strategies: List[() => Future[Option[DefinitionResult]]] =
       if (shouldUseOldOrder)
@@ -159,7 +152,7 @@ final class DefinitionProvider(
           }
       }
     } yield {
-      reportBuilder.build().foreach(rc.unsanitized.create(_))
+      reportBuilder.build().foreach(r => rc.unsanitized().create(() => r))
       result
     }
   }
@@ -413,6 +406,10 @@ class DestinationProvider(
     sourceMapper: SourceMapper,
 ) {
 
+  def findDefinitionFile(symbol: String): List[AbsolutePath] = {
+    index.findFileForToplevel(Symbol(symbol).toplevel).map(_._1)
+  }
+
   private def bestTextDocument(
       symbolDefinition: SymbolDefinition
   ): TextDocument = {
@@ -427,7 +424,7 @@ class DestinationProvider(
     }
 
     val path = symbolDefinition.path
-    if (path.isAmmoniteScript || parsed.occurrences.isEmpty) {
+    if (path.isScalaScript || parsed.occurrences.isEmpty) {
       // Fall back to SemanticDB on disk, if any
 
       def fromSemanticdbs(p: AbsolutePath): Option[TextDocument] =
@@ -621,10 +618,8 @@ class DefinitionProviderReportBuilder(
                 |${params.printed(buffers)}
                 |""".stripMargin,
             s"empty definition using pc, found symbol in pc: ${compilerDefn.querySymbol}",
-            path = Some(path.toURI),
-            id = querySymbol.orElse(
-              Some(s"${path.toURI}:${params.getPosition().getLine()}")
-            ),
+            path = ju.Optional.of(path.toURI),
+            id = querySymbol.map(s => s"${path.toURI}:$s").asJava,
             error = error,
           )
         )

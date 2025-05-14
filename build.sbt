@@ -9,7 +9,7 @@ Global / onChangedBuildSource := ReloadOnSourceChanges
 Global / resolvers += "scala-integration" at
   "https://scala-ci.typesafe.com/artifactory/scala-integration/"
 
-def localSnapshotVersion = "1.5.2-SNAPSHOT"
+def localSnapshotVersion = "1.5.4-SNAPSHOT"
 def isCI = System.getenv("CI") != null
 def isTest = System.getenv("METALS_TEST") != null
 
@@ -120,6 +120,15 @@ def crossTestDyn(state: State, scalaV: String): State = {
   out
 }
 
+def crossTestDynOnly(state: State, scalaV: String, testName: String): State = {
+  val configured = configureMtagsScalaVersionDynamically(state, scalaV)
+  val (out, _) =
+    Project
+      .extract(configured)
+      .runInputTask(cross / Test / testOnly, testName, configured)
+  out
+}
+
 commands ++= Seq(
   Command.command("save-expect") { s =>
     "unit/test:runMain tests.SaveExpect" :: "quick-publish-local" :: "slow/test:runMain tests.feature.SlowSaveExpect" :: s
@@ -138,6 +147,9 @@ commands ++= Seq(
   },
   Command.single("test-mtags-dyn") { (s, scalaV) =>
     crossTestDyn(s, scalaV)
+  },
+  Command.single("cross-test-only-2-11") { (s, testName) =>
+    crossTestDynOnly(s, V.scala211, " " + testName)
   },
 )
 
@@ -223,6 +235,7 @@ lazy val interfaces = project
       "org.scalameta" % "mtags-interfaces" % "1.2.2",
       "org.scalameta" % "mtags-interfaces" % "1.3.2",
       "org.scalameta" % "mtags-interfaces" % "1.4.2",
+      "org.scalameta" % "mtags-interfaces" % "1.5.2",
     ),
     crossPaths := false,
     libraryDependencies ++= List(
@@ -256,7 +269,7 @@ lazy val mtagsShared = project
     Compile / packageSrc / publishArtifact := true,
     libraryDependencies ++= List(
       "org.lz4" % "lz4-java" % "1.8.0",
-      "com.google.protobuf" % "protobuf-java" % "4.30.0",
+      "com.google.protobuf" % "protobuf-java" % "4.30.2",
       V.guava,
       "io.get-coursier" % "interface" % V.coursierInterfaces,
     ),
@@ -392,7 +405,8 @@ lazy val metals = project
       // =================
       // for bloom filters
       V.guava,
-      "org.scalameta" %% "metaconfig-core" % "0.15.0",
+      "com.google.code.findbugs" % "jsr305" % "3.0.2",
+      "org.scalameta" %% "metaconfig-core" % "0.16.0",
       // for measuring memory footprint
       "org.openjdk.jol" % "jol-core" % "0.17",
       // for file watching
@@ -401,7 +415,7 @@ lazy val metals = project
       "io.undertow" % "undertow-core" % "2.2.20.Final",
       "org.jboss.xnio" % "xnio-nio" % "3.8.16.Final",
       // for persistent data like "dismissed notification"
-      "org.flywaydb" % "flyway-core" % "11.3.4",
+      "org.flywaydb" % "flyway-core" % "11.8.0",
       "com.h2database" % "h2" % "2.3.232",
       // for BSP
       "org.scala-sbt.ipcsocket" % "ipcsocket" % "1.6.3",
@@ -413,7 +427,8 @@ lazy val metals = project
       V.dap4j,
       "ch.epfl.scala" %% "scala-debug-adapter" % V.debugAdapter,
       // for finding paths of global log/cache directories
-      "dev.dirs" % "directories" % "26",
+      "io.get-coursier.util" % "directories" % "0.1.3",
+      "io.get-coursier.util" % "directories-jni" % "0.1.3",
       // ==================
       // Scala dependencies
       // ==================
@@ -440,13 +455,15 @@ lazy val metals = project
         scalaVersion.value
       ) cross CrossVersion.full,
       "org.scalameta" %% "semanticdb-shared" % V.semanticdb(scalaVersion.value),
-      // For starting Ammonite
-      "io.github.alexarchambault.ammonite" %% "ammonite-runner" % "0.4.0",
       "org.scala-lang.modules" %% "scala-xml" % "2.3.0",
       ("org.virtuslab.scala-cli" % "scala-cli-bsp" % V.scalaCli)
         .exclude("ch.epfl.scala", "bsp4j"),
       // For test frameworks
       "ch.epfl.scala" %% "bloop-config" % V.bloopConfig,
+      // For MCP
+      "io.modelcontextprotocol.sdk" % "mcp" % "0.9.0",
+      "com.fasterxml.jackson.core" % "jackson-databind" % "2.15.4",
+      "io.undertow" % "undertow-servlet" % "2.3.12.Final",
     ),
     buildInfoPackage := "scala.meta.internal.metals",
     buildInfoKeys := Seq[BuildInfoKey](
@@ -466,7 +483,6 @@ lazy val metals = project
       "semanticdbVersion" -> V.semanticdb(scalaVersion.value),
       "javaSemanticdbVersion" -> V.javaSemanticdb,
       "scalafmtVersion" -> V.scalafmt,
-      "ammoniteVersion" -> V.ammonite,
       "scalaCliVersion" -> V.scalaCli,
       "millVersion" -> V.mill,
       "debugAdapterVersion" -> V.debugAdapter,
@@ -479,9 +495,6 @@ lazy val metals = project
       "nonDeprecatedScalaVersions" -> V.nonDeprecatedScalaVersions,
       "scala211" -> V.scala211,
       "scala212" -> V.scala212,
-      "ammonite212" -> V.ammonite212Version,
-      "ammonite213" -> V.ammonite213Version,
-      "ammonite3" -> V.ammonite3Version,
       "bazelScalaVersion" -> V.bazelScalaVersion,
       "scala213" -> V.scala213,
       "scala3" -> V.scala3,
@@ -508,13 +521,7 @@ lazy val `sbt-metals` = project
     (pluginCrossBuild / sbtVersion) := {
       scalaBinaryVersion.value match {
         case "2.12" => "1.5.8"
-        case _ => "2.0.0-M3"
-      }
-    },
-    scalacOptions ++= {
-      scalaBinaryVersion.value match {
-        case "2.12" => "-Xsource:3" :: Nil
-        case _ => Nil
+        case _ => "2.0.0-M4"
       }
     },
   )
@@ -710,7 +717,6 @@ lazy val metalsDependencies = project
     libraryDependencies ++= List(
       // The dependencies listed below are only listed so Scala Steward
       // will pick them up and update them. They aren't actually used.
-      "com.lihaoyi" %% "ammonite-util" % V.ammonite,
       // not available for Scala 2.13.13
       // "org.typelevel" % "kind-projector" % V.kindProjector cross CrossVersion.full,
       "com.olegpy" %% "better-monadic-for" % V.betterMonadicFor,
@@ -793,7 +799,7 @@ lazy val docs = project
     publish / skip := true,
     moduleName := "metals-docs",
     mdoc := (Compile / run).evaluated,
-    dependencyOverrides += "org.scalameta" %% "metaconfig-core" % "0.15.0",
+    dependencyOverrides += "org.scalameta" %% "metaconfig-core" % "0.16.0",
   )
   .dependsOn(metals)
   .enablePlugins(DocusaurusPlugin)
