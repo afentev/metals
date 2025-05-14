@@ -14,7 +14,7 @@ object BloopDiagnosticsParser {
       if (element.startsWith("/")) {
         accumulator.prepended(Vector(element))
       } else {
-        accumulator.tail.prepended(accumulator.head.prepended(element))
+        accumulator.drop(1).prepended(accumulator.headOption.fold(Vector(element))(_.prepended(element)))
       }
     }.flatMap(errorsR => {
       val errors = errorsR.reverse
