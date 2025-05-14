@@ -9,22 +9,20 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.ScheduledExecutorService
 import java.util.logging.Logger
-import java.{util => ju}
-
+import java.util as ju
 import scala.collection.Seq
 import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContextExecutor
 import scala.reflect.io.VirtualDirectory
 import scala.tools.nsc.Settings
 import scala.tools.nsc.reporters.StoreReporter
-
-import scala.meta.internal.jdk.CollectionConverters._
+import scala.meta.internal.jdk.CollectionConverters.*
 import scala.meta.internal.metals.CompilerVirtualFileParams
 import scala.meta.internal.metals.EmptyCancelToken
 import scala.meta.internal.metals.PcQueryContext
 import scala.meta.internal.metals.ReportLevel
 import scala.meta.internal.mtags.BuildInfo
-import scala.meta.internal.mtags.MtagsEnrichments._
+import scala.meta.internal.mtags.MtagsEnrichments.*
 import scala.meta.pc.AutoImportsResult
 import scala.meta.pc.CodeActionId
 import scala.meta.pc.CompletionItemPriority
@@ -43,17 +41,8 @@ import scala.meta.pc.SymbolSearch
 import scala.meta.pc.VirtualFileParams
 import scala.meta.pc.reports.EmptyReportContext
 import scala.meta.pc.reports.ReportContext
-import scala.meta.pc.{PcSymbolInformation => IPcSymbolInformation}
-
-import org.eclipse.lsp4j.CompletionItem
-import org.eclipse.lsp4j.CompletionList
-import org.eclipse.lsp4j.Diagnostic
-import org.eclipse.lsp4j.DocumentHighlight
-import org.eclipse.lsp4j.InlayHint
-import org.eclipse.lsp4j.Range
-import org.eclipse.lsp4j.SelectionRange
-import org.eclipse.lsp4j.SignatureHelp
-import org.eclipse.lsp4j.TextEdit
+import scala.meta.pc.PcSymbolInformation as IPcSymbolInformation
+import org.eclipse.lsp4j.{CompletionItem, CompletionList, Diagnostic, DocumentHighlight, InlayHint, Position, Range, SelectionRange, SignatureHelp, TextEdit}
 
 import scala.reflect.internal.util.RangePosition
 
@@ -173,20 +162,19 @@ case class ScalaPresentationCompiler(
   private def collectDiagnosticsPC(pc: CompilerWrapper[StoreReporter, MetalsGlobal], params: VirtualFileParams): ju.List[Diagnostic] = {
     val unit = new TypeCheckCompilationUnit(pc.compiler(params), params)
     val infos = unit.getInfos
-    val diagnostics = infos.flatMap(info => info.pos match {
+    infos.flatMap(info => info.pos match {
       case range: RangePosition =>
         val source = range.source
 
-        val l1 = source.offsetToLine(range.start)
-        val o1 = range.start - source.lineToOffset(l1)
+        val lineStart = source.offsetToLine(range.start)
+        val characterStart = range.start - source.lineToOffset(lineStart)
 
-        val l2 = source.offsetToLine(range.end)
-        val o2 = range.end - source.lineToOffset(l2)
+        val lineEnd = source.offsetToLine(range.end)
+        val characterEnd = range.end - source.lineToOffset(lineEnd)
 
-        Some(new Diagnostic(new Range(new org.eclipse.lsp4j.Position(l1, o1), new org.eclipse.lsp4j.Position(l2, o2)), info.msg))
+        Some(new Diagnostic(new Range(new Position(lineStart, characterStart), new Position(lineEnd, characterEnd)), info.msg))
       case _ => None
-    }).toList
-    diagnostics.asJava
+    }).toList.asJava
   }
 
   override def didChange(
