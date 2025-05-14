@@ -20,11 +20,11 @@ object BloopDiagnosticsParser {
       val errors = errorsR.reverse
       for {
         head <- errors.headOption
-        splitted = head.split(":", 3)
-        filepath <- splitted.headOption
-        line1 <- splitted.lift(1).flatMap(_.toIntOption)
+        split = head.split(":", 3)
+        filepath <- split.headOption
+        line1 <- split.lift(1).flatMap(_.toIntOption)
         line0 = line1 - 1
-        errorText <- splitted.lift(2).map(_.strip())
+        errorText <- split.lift(2).map(_.strip())
         uriFilepath = Paths.get(filepath).toUri
 
         pointerIndex = errors.indexWhere("""^\s*\^""".r.findPrefixOf(_).isDefined)

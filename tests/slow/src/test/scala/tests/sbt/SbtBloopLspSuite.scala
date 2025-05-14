@@ -36,74 +36,6 @@ class SbtBloopLspSuite
       workspace: AbsolutePath
   ): Option[String] = SbtDigest.current(workspace)
 
-  test("my bloopInstall test") {
-    cleanWorkspace()
-    // directory should not be used as sbt script
-    workspace.resolve("sbt").createDirectories()
-    for {
-      _ <- initialize(
-        s"""|/project/build.properties
-            |sbt.version=$sbtVersion
-            |/build.sbt
-            |scalaVersion := "${V.scala213}"
-            |val x: String = 42
-            |""".stripMargin,
-        expectError = true,
-      )
-      _ = assertStatus(!_.isInstalled)
-    } yield {
-      assertNoDiff(
-        client.pathDiagnostics("build.sbt", formatMessage = false),
-        """|error: type mismatch;
-           | found   : Int(42)
-           | required: String
-           |val x: String = 42
-           |                ^
-           |""".stripMargin,
-      )
-    }
-  }
-
-  test("myTest") {
-    cleanWorkspace()
-    // directory should not be used as sbt script
-    workspace.resolve("sbt").createDirectories()
-    for {
-      _ <- initialize(
-        s"""|/project/build.properties
-            |sbt.version=$sbtVersion
-            |/build.sbt
-            |scalaVersion := "${V.scala213}"
-            |""".stripMargin
-      )
-      _ = assertNoDiff(
-        client.workspaceMessageRequests,
-        importBuildMessage,
-      )
-      _ = client.messageRequests.clear() // restart
-      _ = assertStatus(_.isInstalled)
-      _ <- server.didChange("build.sbt")(_ + "\n// comment")
-      _ = assertNoDiff(client.workspaceMessageRequests, "")
-      _ <- server.didSave("build.sbt")
-      // Comment changes do not trigger "re-import project" request
-      _ = assertNoDiff(client.workspaceMessageRequests, "")
-      _ = client.importBuildChanges = ImportBuildChanges.yes
-      _ <- server.didChange("build.sbt") { text =>
-        text + "\nval x: String = 42\n"
-      }
-    } yield {
-      assertNoDiff(
-        client.pathDiagnostics("build.sbt"),
-        """|build.sbt:4:17: error: type mismatch;
-           | found   : Int(42)
-           | required: String
-           |val x: String = 42
-           |                ^^
-           |""".stripMargin,
-      )
-    }
-  }
-
   test("basic") {
     cleanWorkspace()
     // directory should not be used as sbt script
@@ -383,6 +315,64 @@ class SbtBloopLspSuite
       )
       _ = assertStatus(_.isInstalled)
     } yield ()
+  }
+
+  test("produce-diagnostics-on-error") {
+    cleanWorkspace()
+    // directory should not be used as sbt script
+    workspace.resolve("sbt").createDirectories()
+    for {
+      _ <- initialize(
+        s"""|/project/build.properties
+            |sbt.version=$sbtVersion
+            |/build.sbt
+            |scalaVersion := "${V.scala213}"
+            |val x: String = 42
+            |""".stripMargin,
+        expectError = true,
+      )
+      _ = assertStatus(!_.isInstalled)
+    } yield {
+      assertNoDiff(
+        client.pathDiagnostics("build.sbt", formatMessage = false),
+        """|error: type mismatch;
+           | found   : Int(42)
+           | required: String
+           |val x: String = 42
+           |                ^
+           |""".stripMargin,
+      )
+    }
+  }
+
+  test("produce-diagnostics-on-change") {
+    cleanWorkspace()
+    // directory should not be used as sbt script
+    workspace.resolve("sbt").createDirectories()
+    for {
+      _ <- initialize(
+        s"""|/project/build.properties
+            |sbt.version=$sbtVersion
+            |/build.sbt
+            |scalaVersion := "${V.scala213}"
+            |""".stripMargin
+      )
+      _ = client.messageRequests.clear()
+      _ = assertStatus(_.isInstalled)
+      _ <- server.didChange("build.sbt") { text =>
+        text + "\nval x: String = 42\n"
+      }
+    } yield {
+      assertNoDiff(
+        client.pathDiagnostics("build.sbt"),
+        """|build.sbt:3:17: error: type mismatch;
+           | found   : Int(42)
+           | required: String
+           |val x: String = 42
+           |                ^^
+           |""".stripMargin,
+      )
+    }
   }
 
   test("supported-scala") {

@@ -1,9 +1,11 @@
 package scala.meta.internal.pc
 
-import java.util as ju
+import java.{util => ju}
+
 import scala.reflect.internal.Reporter
 import scala.tools.nsc.reporters.StoreReporter
-import scala.meta.internal.jdk.CollectionConverters.*
+
+import scala.meta.internal.jdk.CollectionConverters._
 import scala.meta.pc.OutlineFiles
 import scala.meta.pc.VirtualFileParams
 import scala.tools.nsc.Settings

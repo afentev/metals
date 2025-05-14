@@ -168,12 +168,9 @@ case class ScalaPresentationCompiler(
     )
   }
 
-  def temp(pc: CompilerWrapper[StoreReporter, MetalsGlobal], params: VirtualFileParams): ju.List[Diagnostic] = {
-    pprint.log("temp called1")
+  private def collectDiagnosticsPC(pc: CompilerWrapper[StoreReporter, MetalsGlobal], params: VirtualFileParams): ju.List[Diagnostic] = {
     val unit = new TypeCheckCompilationUnit(pc.compiler(params), params)
-    pprint.log("temp called2")
     val infos = unit.getInfos
-    pprint.log("temp called3")
     val diagnostics = infos.flatMap(info => info.pos match {
       case range: RangePosition =>
         val source = range.source
@@ -185,14 +182,8 @@ case class ScalaPresentationCompiler(
         val o2 = range.end - source.lineToOffset(l2)
 
         Some(new Diagnostic(new Range(new org.eclipse.lsp4j.Position(l1, o1), new org.eclipse.lsp4j.Position(l2, o2)), info.msg))
-      case other =>
-        pprint.log(other)
-        pprint.log("Skipped non range info!!!")
-        None
+      case _ => None
     }).toList
-    pprint.log("temp called4")
-    pprint.log(diagnostics)
-    pprint.log("temp called5")
     diagnostics.asJava
   }
 
@@ -203,7 +194,7 @@ case class ScalaPresentationCompiler(
       compilerAccess.withNonInterruptableCompiler(
         List.empty[Diagnostic].asJava,
         params.token
-      ) (temp(_, params))(params.toQueryContext)
+      ) (collectDiagnosticsPC(_, params))(params.toQueryContext)
     } else {
       CompletableFuture.completedFuture(List.empty.asJava)
     }

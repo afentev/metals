@@ -265,23 +265,19 @@ class Compilers(
           ds <-
             pc
               .didChange(
-                CompilerVirtualFileParams(path.toNIO.toUri(), modifiedText)
+                CompilerVirtualFileParams(path.toNIO.toUri, modifiedText)
               )
               .asScala
-              .map(x => {
-                x.forEach(d => {
-                  val range = d.getRange
+              .map(diagnosticsList => {
+                diagnosticsList.forEach(diagnostic => {
+                  val range = diagnostic.getRange
                   val start = range.getStart
                   val end = range.getEnd
                   start.setLine(start.getLine - prependedLinesSize)
                   end.setLine(end.getLine - prependedLinesSize)
-                  range.setStart(start)
-                  range.setEnd(end)
-                  d.setRange(range)
-                  d.setSeverity(DiagnosticSeverity.Error)
+                  diagnostic.setSeverity(DiagnosticSeverity.Error)
                 })
-                pprint.log("XXQQ " + x.toString)
-                x
+                diagnosticsList
               })
         } yield {
           ds.asScala.map(adjust.adjustDiagnostic).toList
@@ -1656,7 +1652,6 @@ class Compilers(
       if (doc.text.isEmpty()) doc.withText(text)
       else doc
     }
-    pprint.log("TESTS " + textDocument.diagnostics.toString())
     if (prependedLinesSize > 0)
       cleanupAutoImports(textDocument, text, prependedLinesSize)
     else textDocument

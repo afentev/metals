@@ -1,9 +1,6 @@
 package scala.meta.internal.pc
 
-import java.io.{PrintWriter, StringWriter}
 import scala.meta.pc.{OffsetParams, VirtualFileParams}
-import scala.tools.nsc.{Settings}
-import scala.tools.nsc.reporters.{ConsoleReporter, Reporter, StoreReporter}
 
 class TypeCheckCompilationUnit(
                              val compiler: MetalsGlobal,
@@ -12,7 +9,7 @@ class TypeCheckCompilationUnit(
   import compiler._
   val unit: RichCompilationUnit = addCompilationUnit(
     code = params.text(),
-    filename = params.uri().toString(),
+    filename = params.uri().toString,
     cursor = None
   )
   val offset: Int = params match {
@@ -21,39 +18,16 @@ class TypeCheckCompilationUnit(
   }
   val pos: Position = unit.position(offset)
   lazy val text = unit.source.content
-  println("TypeCheckCompilationUnit constructed")
 
-//  reporter = new StoreReporter(new Settings(s => {
-//    println("not called for some reason " + s)
-//    throw new IllegalStateException("or called?")
-//  }))
-  val stringWriterErr = new StringWriter();
-  val printWriterErr = new PrintWriter(stringWriterErr, true);
-  val stringWriter = new StringWriter();
-  val printWriter = new PrintWriter(stringWriter, true);
-//  reporter = new ConsoleReporter(new Settings(s => {
-//        println("not called for some reason " + s)
-//        throw new IllegalStateException("or called?")
-//      }), Console.in, printWriterErr, printWriter)
-//  reporter = Reporter.apply(new Settings(s => {
-//    println("not called for some reason " + s)
-//    throw new IllegalStateException("or called?")
-//  }))
-  val prevR = reporter
+  private val previousReporter = reporter
 
-  val console = storeReporterConstructor(settings)
+  private val console = storeReporterConstructor(settings)
   reporter = console
   typeCheck(unit)
-  printWriter.flush()
-  stringWriter.flush()
-  pprint.log(stringWriter.toString)
-  printWriterErr.flush()
-  stringWriterErr.flush()
-  pprint.log(stringWriterErr.toString)
-  reporter = prevR
+
+  reporter = previousReporter
 
   def getInfos = {
-    println("getInfos called")
     console.infos.toSet
   }
 }

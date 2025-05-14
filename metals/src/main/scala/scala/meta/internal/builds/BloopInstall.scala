@@ -1,17 +1,16 @@
 package scala.meta.internal.builds
 
-import org.eclipse.lsp4j.{Diagnostic, MessageType, PublishDiagnosticsParams}
-
-import java.util
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
+
 import scala.meta.internal.builds.Digest.Status
 import scala.meta.internal.metals.BuildInfo
 import scala.meta.internal.metals.Confirmation
-import scala.meta.internal.metals.Messages.*
-import scala.meta.internal.metals.MetalsEnrichments.*
+import scala.meta.internal.metals.Messages._
+import scala.meta.internal.metals.MetalsEnrichments._
 import scala.meta.internal.metals.Tables
 import scala.meta.internal.metals.UserConfiguration
 import scala.meta.internal.metals.clients.language.MetalsLanguageClient
@@ -74,8 +73,13 @@ final class BloopInstall(
       javaHome: Option[String],
   ): Future[WorkspaceLoadedStatus] = {
     persistChecksumStatus(Status.Started, buildTool)
+    val buffer = scala.collection.mutable.ArrayBuffer.empty[String]
+    val errorHandler = (x: String) => {
+      buffer.append(x)
+      scribe.error(x)
+    }
     val processFuture = shellRunner
-      .runAndCollect(
+      .run(
         s"${buildTool.executableName} bloopInstall",
         args,
         buildTool.projectRoot,
@@ -88,16 +92,16 @@ final class BloopInstall(
           "METALS_ENABLED" -> "true",
           "SCALAMETA_VERSION" -> BuildInfo.semanticdbVersion,
         ) ++ sys.env,
+        processErr = errorHandler,
       )
       .map {
-        case (ExitCodes.Success, x) => (WorkspaceLoadedStatus.Installed, x)
-        case (ExitCodes.Cancel, x) => (WorkspaceLoadedStatus.Cancelled, x)
-        case (result, x) => (WorkspaceLoadedStatus.Failed(result), x)
+        case ExitCodes.Success => WorkspaceLoadedStatus.Installed
+        case ExitCodes.Cancel => WorkspaceLoadedStatus.Cancelled
+        case result => WorkspaceLoadedStatus.Failed(result)
       }
-      .map {case (lhs, x) =>
-        pprint.log("Here: " + x.toString())
-        BloopDiagnosticsParser.getDiagnosticsFromErrors(x.toArray).foreach(languageClient.publishDiagnostics)
-        lhs
+      .map { value =>
+        BloopDiagnosticsParser.getDiagnosticsFromErrors(buffer.toArray).foreach(languageClient.publishDiagnostics)
+        value
       }
     processFuture.foreach { result =>
       try result.toChecksumStatus.foreach(persistChecksumStatus(_, buildTool))
@@ -133,7 +137,6 @@ final class BloopInstall(
       isImportInProcess: AtomicBoolean,
   ): Future[WorkspaceLoadedStatus] =
     synchronized {
-      pprint.log("Debug 1")
       oldInstallResult(digest) match {
         case Some(result)
             if result != WorkspaceLoadedStatus.Duplicate(Status.Requested) =>
@@ -152,8 +155,6 @@ final class BloopInstall(
                 digest,
               )
               installResult <- {
-                pprint.log("Debug 2")
-//                languageClient.showMessage(MessageType.Error, "Debug")
                 if (userResponse.isYes) {
                   runUnconditionally(buildTool, isImportInProcess)
                 } else {
